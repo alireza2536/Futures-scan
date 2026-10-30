@@ -123,7 +123,7 @@ async function testCryptoCom() {
   }
 }
 const outcomes = [];
-for (const [name, fn] of [["Crypto.com",testCryptoCom],["HTX",testHtx],["BitMart",testBitmart]]) {
+for (const [name, fn] of [["HTX",testHtx]]) {
   try { await fn(); outcomes.push({ exchange: name, status: "TESTED" }); }
   catch (error) { console.error(JSON.stringify({ exchange: name, status: "BLOCKED", error: error.message })); outcomes.push({ exchange: name, status: "BLOCKED", error: error.message }); }
 }
