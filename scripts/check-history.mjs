@@ -1,7 +1,7 @@
 import { fetchOkxHistory, fetchMexcHistory } from "./market-data.mjs";
 import { calculateEMA, calculateLatestIndicators } from "./indicators.mjs";
 
-const LONG_HISTORY = 1201;
+const LONG_HISTORY = 2000;
 const TARGETS = [
   { label: "15m", okx: "15m", mexc: "15m", count: LONG_HISTORY, mode: "cci" },
   { label: "4h", okx: "4H", mexc: "4h", count: LONG_HISTORY, mode: "cci" },
