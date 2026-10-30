@@ -54,7 +54,7 @@ export async function fetchOkxHistory({
   let cursor = null;
   let page = 0;
   while (collected.length < count && page < 20) {
-    const params = new URLSearchParams({ instId, bar, limit: "300" });
+    const params = new URLSearchParams({ instId, bar, limit: "100" });
     if (cursor !== null) params.set("after", String(cursor));
     const endpoint = page === 0
       ? "/api/v5/market/candles"
