@@ -24,3 +24,4 @@ jobs:
         run: node scripts/check-exchanges.mjs
       - name: Fetch historical candles and calculate EMA500 / CCI1200
         run: node scripts/check-history.mjs
+
