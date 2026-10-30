@@ -1,0 +1,22 @@
+name: Exchange API connectivity
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/check-exchanges.mjs"
+      - ".github/workflows/exchange-connectivity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  connectivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check public futures APIs
+        run: node scripts/check-exchanges.mjs
