@@ -14,7 +14,7 @@ permissions:
 jobs:
   validation:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,9 +26,12 @@ jobs:
         run: node scripts/check-exchanges.mjs
       - name: Fetch historical candles and calculate EMA500 / CCI1200
         run: node scripts/check-history.mjs
-
       - name: Print last five closed BTC 4h candles and indicators for TradingView comparison
         run: node scripts/compare-indicators.mjs
+      - name: Install CCXT adapters for additional exchange diagnostics
+        run: npm install --no-save --no-package-lock ccxt
+      - name: Test Bitget, Gate.io, BingX, WEEX, KuCoin and Coinbase International
+        run: node scripts/check-additional-exchanges.mjs
       - name: Smoke-test live scanner on BTC perpetuals
         env:
           EXCHANGES: OKX,MEXC
