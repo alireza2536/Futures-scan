@@ -30,7 +30,7 @@ jobs:
         run: node scripts/compare-indicators.mjs
       - name: Install CCXT adapters for additional exchange diagnostics
         run: npm install --no-save --no-package-lock ccxt
-      - name: Test Bitget, Gate.io, BingX, WEEX, KuCoin and Coinbase International
+      - name: Test Bitget, Gate.io, BingX, WEEX, KuCoin, Coinbase International, Crypto.com, HTX and BitMart
         run: node scripts/check-additional-exchanges.mjs
       - name: Upload additional exchange diagnostic results
         if: always() && hashFiles('additional-exchange-results.json') != ''
