@@ -9,7 +9,7 @@ const TARGETS = [
 ];
 const EXCHANGES = [
   { id: "bitget", label: "Bitget" },
-  { id: "gateio", label: "Gate.io" },
+  { id: "gate", label: "Gate.io" },
   { id: "bingx", label: "BingX" },
   { id: "weex", label: "WEEX" },
   { id: "kucoinfutures", label: "KuCoin Futures" },
@@ -66,7 +66,12 @@ async function checkExchange(config) {
   });
   try {
     const markets = await exchange.loadMarkets();
-    const futures = Object.values(markets).filter(m =>
+    const allMarkets = Object.values(markets);
+    if (config.id === "coinbaseinternational") {
+      const btcDerivatives = allMarkets.filter(m => m && m.base === "BTC" && m.contract === true && m.swap === true);
+      output.btcDerivativeMarkets = btcDerivatives.map(m => ({ symbol: m.symbol, quote: m.quote, settle: m.settle, active: m.active }));
+    }
+    const futures = allMarkets.filter(m =>
       m && m.active !== false && m.contract === true && m.swap === true &&
       m.quote === "USDT" && m.settle === "USDT"
     );
