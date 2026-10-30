@@ -1,19 +1,27 @@
 const DEFAULT_TIMEOUT_MS = 20000;
 
 async function requestJson(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      headers: { accept: "application/json", "user-agent": "Futures-scan/0.2" },
-      signal: controller.signal
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}: ${JSON.stringify(body).slice(0, 200)}`);
-    return body;
-  } finally {
-    clearTimeout(timer);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        headers: { accept: "application/json", "user-agent": "Futures-scan/0.2" },
+        signal: controller.signal
+      });
+      const body = await response.json();
+      if (response.status === 429 || body?.code === "50011") {
+        if (attempt === 4) throw new Error(`HTTP 429 rate limit for ${url}`);
+        await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)));
+        continue;
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}: ${JSON.stringify(body).slice(0, 200)}`);
+      return body;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw new Error(`Request retries exhausted for ${url}`);
 }
 
 function validBar(bar) {
