@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { calculateCCI, calculateEMA, calculateLatestIndicators } from "./indicators.mjs";
 
 test("EMA uses an SMA seed then the standard recursive smoothing", () => {
-  assert.deepEqual(calculateEMA([1, 2, 3, 4, 5], 3), [null, null, 2, 3.5, 4.25]);
+  assert.deepEqual(calculateEMA([1, 2, 3, 4, 5], 3), [null, null, 2, 3, 4]);
 });
 
 test("CCI is zero for a constant typical-price series", () => {
