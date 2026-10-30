@@ -49,7 +49,7 @@ function htxMap(r) {
   return { timestamp: Number(r.id)*1000, open: Number(r.open), high: Number(r.high), low: Number(r.low), close: Number(r.close), volume: Number(r.vol ?? r.amount) };
 }
 function bitmartMap(r) {
-  return { timestamp: Number(r.ts)*1000, open: Number(r.o), high: Number(r.h), low: Number(r.l), close: Number(r.c), volume: Number(r.v) };
+  return { timestamp: Number(r.timestamp ?? r.ts)*1000, open: Number(r.open_price ?? r.o), high: Number(r.high_price ?? r.h), low: Number(r.low_price ?? r.l), close: Number(r.close_price ?? r.c), volume: Number(r.volume ?? r.v) };
 }
 function cryptoMap(r) {
   return { timestamp: Number(r.t ?? r.timestamp), open: Number(r.o ?? r.open), high: Number(r.h ?? r.high), low: Number(r.l ?? r.low), close: Number(r.c ?? r.close), volume: Number(r.v ?? r.volume ?? r.q) };
@@ -75,7 +75,7 @@ async function testHtx() {
 async function testBitmart() {
   const exchange = "BitMart";
   console.log(JSON.stringify({ exchange, test: "API", status: "START" }));
-  const detail = await getJson("https://api-cloud-v2.bitmart.com/contract/public/details");
+  let detail; let detailError;\n  for (const base of ["https://api-cloud-v2.bitmart.com", "https://api-cloud.bitmart.com"]) { try { detail = await getJson(`${base}/contract/public/details`); break; } catch (e) { detailError = e; } }\n  if (!detail) throw new Error(`BitMart contract endpoint unreachable: ${detailError?.message ?? "unknown error"}`);
   const contracts = detail.data?.symbols ?? detail.data?.contracts ?? [];
   const btc = contracts.find(x => /BTCUSDT/i.test(x.symbol ?? "") && (!x.status || String(x.status).toLowerCase() === "trading" || String(x.status) === "1"));
   if (!btc) throw new Error(`BitMart no BTCUSDT contract in details; contracts=${contracts.length}; keys=${Object.keys(detail.data ?? {}).join(",")}`);
@@ -105,7 +105,7 @@ async function testBitmart() {
 async function testCryptoCom() {
   const exchange = "Crypto.com";
   console.log(JSON.stringify({ exchange, test: "API", status: "START" }));
-  const payload = await getJson("https://deriv-api.crypto.com/v1/public/get-instruments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: 1, method: "public/get-instruments", params: {} }) });
+  let payload; let apiError;\n  for (const params of [{ instrument_type: "PERPETUAL" }, {}]) { try { payload = await getJson("https://deriv-api.crypto.com/v1/public/get-instruments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: 1, method: "public/get-instruments", params }) }); if (payload.code === 0) break; apiError = new Error(JSON.stringify(payload)); } catch (e) { apiError = e; } }\n  if (!payload || payload.code !== 0) throw new Error(`Crypto.com derivatives instrument endpoint failed: ${apiError?.message ?? "unknown error"}`);
   const instruments = payload.result?.data ?? payload.result?.instruments ?? [];
   const btcContracts = instruments.filter(x => /BTC/i.test(x.instrument_name ?? "") && /PERPETUAL|PERP/i.test(`${x.instrument_type ?? ""} ${x.instrument_name ?? ""}`));
   const btcUsdt = btcContracts.find(x => /USDT/i.test(x.instrument_name ?? "") && !/USDC/i.test(x.instrument_name ?? ""));
