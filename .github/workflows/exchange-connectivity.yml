@@ -20,6 +20,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Run deterministic indicator tests
         run: node --test scripts/test-indicators.mjs
+      - name: Run strict long-strategy tests
+        run: node --test scripts/test-strategy.mjs
       - name: Check public exchange connectivity
         run: node scripts/check-exchanges.mjs
       - name: Fetch historical candles and calculate EMA500 / CCI1200
