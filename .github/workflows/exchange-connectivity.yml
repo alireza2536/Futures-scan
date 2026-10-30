@@ -32,6 +32,13 @@ jobs:
         run: npm install --no-save --no-package-lock ccxt
       - name: Test Bitget, Gate.io, BingX, WEEX, KuCoin and Coinbase International
         run: node scripts/check-additional-exchanges.mjs
+      - name: Upload additional exchange diagnostic results
+        if: always() && hashFiles('additional-exchange-results.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: additional-exchange-diagnostics
+          path: additional-exchange-results.json
+          if-no-files-found: ignore
       - name: Smoke-test live scanner on BTC perpetuals
         env:
           EXCHANGES: OKX,MEXC
