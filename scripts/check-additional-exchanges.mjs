@@ -13,7 +13,10 @@ const EXCHANGES = [
   { id: "bingx", label: "BingX" },
   { id: "weex", label: "WEEX" },
   { id: "kucoinfutures", label: "KuCoin Futures" },
-  { id: "coinbaseinternational", label: "Coinbase International" }
+  { id: "coinbaseinternational", label: "Coinbase International" },
+  { id: "cryptocom", label: "Crypto.com" },
+  { id: "htx", label: "HTX" },
+  { id: "bitmart", label: "BitMart" }
 ];
 const INTERVAL_MS = { "15m": 900000, "4h": 14400000, "1d": 86400000 };
 
