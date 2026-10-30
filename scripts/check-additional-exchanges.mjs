@@ -1,5 +1,5 @@
 import ccxt from "ccxt";
-import { calculateLatestIndicators } from "./indicators.mjs";
+import { calculateLatestIndicators, calculateEMA } from "./indicators.mjs";
 import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
 
 const TARGETS = [
@@ -105,6 +105,14 @@ async function checkExchange(config) {
         }
         const bars = rowsToBars(rows);
         historyResults[target.timeframe] = bars;
+        if (target.timeframe === "1d") {
+          const closes = bars.map(bar => bar.close);
+          output.dailyIndicators = {
+            close: closes.at(-1),
+            ema20: calculateEMA(closes, 20).at(-1),
+            ema50: calculateEMA(closes, 50).at(-1)
+          };
+        }
         if (target.timeframe === "4h") {
           const closed = keepClosedFourHourCandles(bars);
           if (closed.length < 1201) throw new Error(`Only ${closed.length} closed 4h candles; need 1201`);
