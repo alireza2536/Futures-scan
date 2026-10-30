@@ -108,15 +108,15 @@ async function testCryptoCom() {
   const exchange = "Crypto.com";
   console.log(JSON.stringify({ exchange, test: "API", status: "START" }));
   let payload; let apiError;
-  for (const params of [{ instrument_type: "PERPETUAL" }, {}]) { try { payload = await getJson("https://deriv-api.crypto.com/v1/public/get-instruments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: 1, method: "public/get-instruments", params }) }); if (payload.code === 0) break; apiError = new Error(JSON.stringify(payload)); } catch (e) { apiError = e; } }
+  for (const params of [{ instrument_type: "PERPETUAL" }, {}]) { try { payload = await getJson("https://api.crypto.com/exchange/v1/public/get-instruments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: 1, method: "public/get-instruments", params }) }); if (payload.code === 0) break; apiError = new Error(JSON.stringify(payload)); } catch (e) { apiError = e; } }
   if (!payload || payload.code !== 0) throw new Error(`Crypto.com derivatives instrument endpoint failed: ${apiError?.message ?? "unknown error"}`);
   const instruments = payload.result?.data ?? payload.result?.instruments ?? [];
   const btcContracts = instruments.filter(x => /BTC/i.test(x.instrument_name ?? "") && /PERPETUAL|PERP/i.test(`${x.instrument_type ?? ""} ${x.instrument_name ?? ""}`));
-  const btcUsdt = btcContracts.find(x => /USDT/i.test(x.instrument_name ?? "") && !/USDC/i.test(x.instrument_name ?? ""));
+  const btcUsdt = btcContracts.find(x => /BTC_USDT-PERP|BTCUSDT-PERP/i.test(x.instrument_name ?? "")) ?? btcContracts.find(x => /USDT/i.test(x.instrument_name ?? "") && !/USDC/i.test(x.instrument_name ?? ""));
   console.log(JSON.stringify({ exchange, test: "contract list", status: "PASS", instruments: instruments.length, btcDerivativeExamples: btcContracts.slice(0,8).map(x=>x.instrument_name), btcUsdtPerpetualFound: Boolean(btcUsdt) }));
   if (!btcUsdt) throw new Error(`No BTC/USDT perpetual in Crypto.com derivatives API; BTC derivatives found: ${btcContracts.map(x=>x.instrument_name).join(", ") || "none"}`);
   for (const t of TARGETS) {
-    const candle = await getJson("https://deriv-api.crypto.com/v1/public/get-candlestick", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: 2, method: "public/get-candlestick", params: { instrument_name: btcUsdt.instrument_name, timeframe: t.crypto, count: t.tf === "1d" ? 60 : 2000 } }) });
+    const candle = await getJson("https://api.crypto.com/exchange/v1/public/get-candlestick", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: 2, method: "public/get-candlestick", params: { instrument_name: btcUsdt.instrument_name, timeframe: t.crypto, count: t.tf === "1d" ? 60 : 2000 } }) });
     const rows = candle.result?.data ?? candle.result?.candlesticks ?? [];
     const bars = normalizeBars(rows, cryptoMap).slice(-(t.tf === "1d" ? 60 : 2000));
     reportHistory(exchange, t.tf, bars);
