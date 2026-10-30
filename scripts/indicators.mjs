@@ -16,9 +16,11 @@ export function calculateEMA(values, length) {
   }
   const output = Array(values.length).fill(null);
   const alpha = 2 / (length + 1);
-  let previous = values.slice(0, length).reduce((sum, value) => sum + value, 0) / length;
-  output[length - 1] = previous;
-  for (let i = length; i < values.length; i += 1) {
+  // Match TradingView Pine ta.ema(): seed from the first valid source value,
+  // then apply alpha * source + (1 - alpha) * previous EMA on every bar.
+  let previous = values[0];
+  output[0] = previous;
+  for (let i = 1; i < values.length; i += 1) {
     previous = alpha * values[i] + (1 - alpha) * previous;
     output[i] = previous;
   }
