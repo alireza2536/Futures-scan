@@ -1,22 +1,26 @@
-name: Exchange API connectivity
+name: Exchange API connectivity and indicator history
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - "scripts/check-exchanges.mjs"
+      - "scripts/**"
       - ".github/workflows/exchange-connectivity.yml"
 
 permissions:
   contents: read
 
 jobs:
-  connectivity:
+  validation:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Check public futures APIs
+      - name: Run deterministic indicator tests
+        run: node --test scripts/test-indicators.mjs
+      - name: Check public exchange connectivity
         run: node scripts/check-exchanges.mjs
+      - name: Fetch historical candles and calculate EMA500 / CCI1200
+        run: node scripts/check-history.mjs
