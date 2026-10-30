@@ -8,6 +8,8 @@ const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC")
   .split(",").map(value => value.trim().toUpperCase()).filter(Boolean);
 const MAX_SYMBOLS = Number(process.env.MAX_SYMBOLS ?? 0);
+const SYMBOL_FILTER = (process.env.SYMBOLS ?? "").split(",").map(value => value.trim()).filter(Boolean);
+const REQUIRE_DATA = process.env.REQUIRE_DATA === "true";
 
 async function getJson(url) {
   let lastError;
@@ -120,9 +122,11 @@ if (EXCHANGES.some(exchange => !["OKX", "MEXC"].includes(exchange))) {
 
 const symbolLists = await Promise.all(EXCHANGES.map(async exchange => {
   const symbols = exchange === "OKX" ? await getOkxSymbols() : await getMexcSymbols();
-  return MAX_SYMBOLS > 0 ? symbols.slice(0, MAX_SYMBOLS) : symbols;
+  const selected = SYMBOL_FILTER.length > 0 ? symbols.filter(item => SYMBOL_FILTER.includes(item.symbol)) : symbols;
+  return MAX_SYMBOLS > 0 ? selected.slice(0, MAX_SYMBOLS) : selected;
 }));
 const universe = symbolLists.flat();
+if (universe.length === 0) throw new Error("No matching USDT perpetual contracts found for the selected exchanges/symbols");
 console.log(`UNIVERSE | ${universe.length} USDT perpetual contracts | exchanges=${EXCHANGES.join(",")} | concurrency=${CONCURRENCY}`);
 
 let completed = 0;
@@ -149,3 +153,4 @@ const summary = {
 await writeFile("scan-results.json", JSON.stringify(summary, null, 2));
 console.log(`SUMMARY | scanned=${results.length} | LONG=${matches.length} | DATA_ERROR=${errors.length}`);
 console.log("RESULT_FILE | scan-results.json");
+if (REQUIRE_DATA && errors.length > 0) process.exitCode = 1;
