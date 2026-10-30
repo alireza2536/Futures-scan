@@ -88,6 +88,7 @@ async function checkExchange(config) {
     const historyResults = {};
     for (const target of TARGETS) {
       try {
+        const duration = INTERVAL_MS[target.timeframe];
         if (!exchange.timeframes || !exchange.timeframes[target.timeframe]) {
           throw new Error(`Timeframe ${target.timeframe} is not supported by this exchange adapter`);
         }
