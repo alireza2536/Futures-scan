@@ -3,7 +3,7 @@ import { fetchOkxHistory, fetchMexcHistory } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
 
-const CANDLE_COUNT = 1205;
+const CANDLE_COUNT = 2000;
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC")
   .split(",").map(value => value.trim().toUpperCase()).filter(Boolean);
@@ -88,7 +88,7 @@ async function scanSymbol(item) {
     const raw = item.exchange === "OKX"
       ? await fetchOkxHistory({ base: item.base, instId: item.symbol, bar: "4H", count: CANDLE_COUNT })
       : await fetchMexcHistory({ symbol: item.symbol, interval: "4h", count: CANDLE_COUNT });
-    const bars = keepClosedFourHourCandles(raw).slice(-1201);
+    const bars = keepClosedFourHourCandles(raw);
     if (bars.length < 1201) {
       throw new Error(`not enough closed candles: ${bars.length}/1201`);
     }
