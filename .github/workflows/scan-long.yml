@@ -1,0 +1,50 @@
+name: Manual Futures Long Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      exchanges:
+        description: "Exchanges to scan (OKX,MEXC)"
+        required: true
+        default: "OKX,MEXC"
+      max_symbols:
+        description: "0 = all eligible USDT perpetual contracts; positive = test limit"
+        required: true
+        default: "0"
+      concurrency:
+        description: "Parallel symbol requests (1-5)"
+        required: true
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test indicator and strategy formulas
+        run: |
+          node --test scripts/test-indicators.mjs
+          node --test scripts/test-strategy.mjs
+      - name: Scan selected futures exchanges
+        env:
+          EXCHANGES: ${{ inputs.exchanges }}
+          MAX_SYMBOLS: ${{ inputs.max_symbols }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+        run: node scripts/scan-long.mjs
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: futures-long-scan-results
+          path: scan-results.json
+          if-no-files-found: ignore
+          retention-days: 7
