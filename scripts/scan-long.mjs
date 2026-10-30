@@ -1,9 +1,9 @@
 import { writeFile } from "node:fs/promises";
 import { fetchOkxHistory, fetchMexcHistory } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
+import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
 
 const CANDLE_COUNT = 1205;
-const TIMEFRAME_MS = 4 * 60 * 60 * 1000;
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC")
   .split(",").map(value => value.trim().toUpperCase()).filter(Boolean);
@@ -67,14 +67,6 @@ async function getMexcSymbols() {
     .map(item => ({ exchange: "MEXC", symbol: item.symbol, display: item.symbol }));
 }
 
-function onlyClosedCandles(bars, now = Date.now()) {
-  return bars.filter(bar => {
-    if (bar.confirmed === false) return false;
-    if (bar.confirmed === true) return true;
-    return bar.timestamp + TIMEFRAME_MS <= now;
-  });
-}
-
 async function mapLimit(items, limit, worker) {
   const output = new Array(items.length);
   let next = 0;
@@ -94,12 +86,12 @@ async function scanSymbol(item) {
     const raw = item.exchange === "OKX"
       ? await fetchOkxHistory({ base: item.base, instId: item.symbol, bar: "4H", count: CANDLE_COUNT })
       : await fetchMexcHistory({ symbol: item.symbol, interval: "4h", count: CANDLE_COUNT });
-    const bars = onlyClosedCandles(raw).slice(-1201);
+    const bars = keepClosedFourHourCandles(raw).slice(-1201);
     if (bars.length < 1201) {
       throw new Error(`not enough closed candles: ${bars.length}/1201`);
     }
     const values = calculateLatestIndicators(bars, { emaLength: 500, cciLength: 1200 });
-    const passed = values.close > values.ema && values.cci > 100;
+    const passed = isLongSetup({ close: values.close, ema500: values.ema, cci1200: values.cci });
     return {
       exchange: item.exchange,
       symbol: item.display,
