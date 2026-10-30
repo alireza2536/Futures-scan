@@ -27,6 +27,8 @@ jobs:
       - name: Fetch historical candles and calculate EMA500 / CCI1200
         run: node scripts/check-history.mjs
 
+      - name: Print last five closed BTC 4h candles and indicators for TradingView comparison
+        run: node scripts/compare-indicators.mjs
       - name: Smoke-test live scanner on BTC perpetuals
         env:
           EXCHANGES: OKX,MEXC
