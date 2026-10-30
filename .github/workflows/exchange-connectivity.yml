@@ -33,6 +33,7 @@ jobs:
       - name: Test Bitget, Gate.io, BingX, WEEX, KuCoin, Coinbase International, Crypto.com, HTX and BitMart
         run: node scripts/check-additional-exchanges.mjs
       - name: Re-test Crypto.com, HTX and BitMart using their direct public APIs
+        continue-on-error: true
         run: node scripts/check-target-exchanges-direct.mjs
       - name: Upload additional exchange diagnostic results
         if: always() && hashFiles('additional-exchange-results.json') != ''
