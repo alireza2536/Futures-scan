@@ -29,7 +29,7 @@ function validOhlcv(row) {
 async function fetchHistory(exchange, symbol, timeframe, count) {
   const duration = INTERVAL_MS[timeframe];
   const collected = new Map();
-  let since = Date.now() - duration * (count + 20);
+  let since = Date.now() - duration * count;
   let pages = 0;
   while (collected.size < count && pages < 12) {
     const remaining = count - collected.size;
@@ -96,6 +96,12 @@ async function checkExchange(config) {
         if (rows.length < minimum) {
           throw new Error(`Only ${rows.length}/${target.count} valid candles returned; minimum required ${minimum}`);
         }
+        const latestTimestamp = Number(rows.at(-1)[0]);
+        const currentBucket = Math.floor(Date.now() / duration) * duration;
+        const freshnessFloor = currentBucket - duration;
+        if (latestTimestamp < freshnessFloor) {
+          throw new Error(`Latest candle is stale: ${new Date(latestTimestamp).toISOString()}; expected at or after ${new Date(freshnessFloor).toISOString()}`);
+        }
         const bars = rowsToBars(rows);
         historyResults[target.timeframe] = bars;
         if (target.timeframe === "4h") {
@@ -121,7 +127,7 @@ async function checkExchange(config) {
     const required = output.checks.filter(x =>
       x.test === "Public API + USDT perpetual contract list" ||
       x.test === "BTC USDT perpetual" ||
-      x.test.startsWith("4h candle history")
+      x.test.includes("candle history")
     );
     output.status = required.every(x => x.status === "PASS") ? "PASS" : "BLOCKED";
     output.history = Object.fromEntries(Object.entries(historyResults).map(([tf, bars]) => [tf, bars.length]));
