@@ -35,6 +35,8 @@ jobs:
       - name: Re-test HTX using its direct public API
         continue-on-error: true
         run: node scripts/check-target-exchanges-direct.mjs
+      - name: Test HTX 15m, 4h and daily data across BTC, ETH, SOL and XRP
+        run: node scripts/check-htx-multi-symbol.mjs
       - name: Upload additional exchange diagnostic results
         if: always() && hashFiles('additional-exchange-results.json') != ''
         uses: actions/upload-artifact@v4
