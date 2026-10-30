@@ -1,0 +1,17 @@
+//@version=6
+indicator("Futures Scan EMA500 + CCI1200 validation", overlay=false, precision=8)
+ema500 = ta.ema(close, 500)
+cci1200 = ta.cci(hlc3, 1200)
+plot(ema500, "EMA500", color=color.orange, display=display.data_window)
+plot(cci1200, "CCI1200", color=color.aqua, display=display.data_window)
+plot(close, "Close", color=color.gray, display=display.data_window)
+var table panel = table.new(position.top_right, 2, 4, border_width=1)
+if barstate.islast
+    table.cell(panel, 0, 0, "Metric")
+    table.cell(panel, 1, 0, "Value")
+    table.cell(panel, 0, 1, "Close")
+    table.cell(panel, 1, 1, str.tostring(close, format.mintick))
+    table.cell(panel, 0, 2, "EMA500")
+    table.cell(panel, 1, 2, str.tostring(ema500, format.mintick))
+    table.cell(panel, 0, 3, "CCI1200")
+    table.cell(panel, 1, 3, str.tostring(cci1200, "#.########"))
