@@ -27,3 +27,10 @@ jobs:
       - name: Fetch historical candles and calculate EMA500 / CCI1200
         run: node scripts/check-history.mjs
 
+      - name: Smoke-test live scanner on BTC perpetuals
+        env:
+          EXCHANGES: OKX,MEXC
+          SYMBOLS: BTC-USDT-SWAP,BTC_USDT
+          CONCURRENCY: "1"
+          REQUIRE_DATA: "true"
+        run: node scripts/scan-long.mjs
