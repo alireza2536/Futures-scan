@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateCCI, calculateEMA, calculateLatestIndicators } from "./indicators.mjs";
 
-test("EMA uses an SMA seed then the standard recursive smoothing", () => {
-  assert.deepEqual(calculateEMA([1, 2, 3, 4, 5], 3), [null, null, 2, 3, 4]);
+test("EMA matches TradingView ta.ema first-value seed and recursion", () => {
+  assert.deepEqual(calculateEMA([1, 2, 3, 4, 5], 3), [1, 1.5, 2.25, 3.125, 4.0625]);
 });
 
 test("CCI is zero for a constant typical-price series", () => {
