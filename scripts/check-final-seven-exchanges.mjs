@@ -59,10 +59,10 @@ async function fetchHistory(exchange, symbol, timeframe, required) {
     await sleep(Math.max(100, Number(exchange.rateLimit) || 100));
   }
   const bars = [...collected.values()].sort((a,b) => a.timestamp-b.timestamp).slice(-required);
-  if (bars.length < required) throw new Error(`Only ${bars.length}/${required} closed valid ${timeframe} candles after ${pages} pages`);
+  if (bars.length === 0) throw new Error(`No closed valid ${timeframe} candles returned after ${pages} pages`);
   const latest = bars.at(-1);
   const freshnessFloor = Math.floor(Date.now()/duration)*duration - duration*2;
-  return { bars, pages, fresh: latest.timestamp >= freshnessFloor, latest: latest.timestamp };
+  return { bars, pages, complete: bars.length >= required, fresh: latest.timestamp >= freshnessFloor, latest: latest.timestamp };
 }
 async function getJson(url) {
   const controller = new AbortController();
@@ -174,10 +174,10 @@ async function checkExchange(config) {
     let oneHour = null;
     try {
       oneHour = await fetchVenueHistory(config, exchange, btc, "1h", NEED["1h"]);
-      const cci1h = calculateCCI(oneHour.bars, 1200).at(-1);
-      const ema5000 = calculateEMA(oneHour.bars.map(x=>x.close), 5000).at(-1);
-      const fresh = oneHour.fresh && Number.isFinite(cci1h) && Number.isFinite(ema5000);
-      result.history["1h"] = { candles: oneHour.bars.length, pages: oneHour.pages, latest: new Date(oneHour.latest).toISOString(), fresh: oneHour.fresh };
+      const cci1h = oneHour.bars.length >= 1200 ? calculateCCI(oneHour.bars, 1200).at(-1) : null;
+      const ema5000 = oneHour.complete ? calculateEMA(oneHour.bars.map(x=>x.close), 5000).at(-1) : null;
+      const fresh = oneHour.complete && oneHour.fresh && Number.isFinite(cci1h) && Number.isFinite(ema5000);
+      result.history["1h"] = { candles: oneHour.bars.length, required: NEED["1h"], complete: oneHour.complete, pages: oneHour.pages, latest: new Date(oneHour.latest).toISOString(), fresh: oneHour.fresh };
       result.indicators.cci1200_1h = cci1h;
       result.indicators.ema5000_1h = ema5000;
       addCheck(result, "1h history + CCI1200 + EMA5000", fresh,
@@ -189,13 +189,15 @@ async function checkExchange(config) {
     let twoHour = null;
     let twoHourMethod = "native";
     if (exchange.timeframes?.["2h"]) {
-      try { twoHour = await fetchVenueHistory(config, exchange, btc, "2h", NEED["2h"]); }
-      catch { twoHour = null; }
+      try {
+        twoHour = await fetchVenueHistory(config, exchange, btc, "2h", NEED["2h"]);
+        if (twoHour.bars.length < NEED["2h"] || !twoHour.fresh) twoHour = null;
+      } catch { twoHour = null; }
     }
-    if (!twoHour?.fresh && oneHour?.fresh) {
+    if (!twoHour && oneHour?.fresh) {
       const derived = aggregate1hTo2h(oneHour.bars);
       if (derived.length >= NEED["2h"]) {
-        twoHour = { bars: derived.slice(-NEED["2h"]), pages: null, fresh: true, latest: derived.at(-1).timestamp };
+        twoHour = { bars: derived.slice(-NEED["2h"]), pages: null, complete: true, fresh: true, latest: derived.at(-1).timestamp };
         twoHourMethod = "aggregated from consecutive closed 1h candles";
       }
     }
