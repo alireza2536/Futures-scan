@@ -41,11 +41,12 @@ async function fetchHistory(exchange, symbol, timeframe, required) {
   if (!exchange.timeframes?.[timeframe]) throw new Error(`Timeframe ${timeframe} not supported by CCXT adapter`);
   const duration = MS[timeframe];
   const collected = new Map();
-  let since = Date.now() - duration * (required + 8);
+  const target = required + 8;
+  let since = Date.now() - duration * (target + 8);
   let pages = 0;
-  while (collected.size < required && pages < 70) {
+  while (collected.size < target && pages < 70) {
     const before = collected.size;
-    const remaining = required - collected.size;
+    const remaining = target - collected.size;
     const limit = Math.min(1000, Math.max(100, remaining + 10));
     const rows = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
     if (!Array.isArray(rows) || rows.length === 0) break;
@@ -62,6 +63,64 @@ async function fetchHistory(exchange, symbol, timeframe, required) {
   const latest = bars.at(-1);
   const freshnessFloor = Math.floor(Date.now()/duration)*duration - duration*2;
   return { bars, pages, fresh: latest.timestamp >= freshnessFloor, latest: latest.timestamp };
+}
+async function getJson(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  try {
+    const response = await fetch(url, { headers: { accept: "application/json", "user-agent": "Futures-scan-validation/1.0" }, signal: controller.signal });
+    const body = await response.json();
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(body).slice(0,180)}`);
+    return body;
+  } finally { clearTimeout(timer); }
+}
+async function fetchHtxHistory(contractCode, timeframe, required) {
+  const periods = { "15m": "15min", "1h": "60min", "2h": "2hour", "4h": "4hour", "1d": "1day" };
+  const duration = MS[timeframe] / 1000;
+  const target = required + 8;
+  const now = Math.floor(Date.now()/1000);
+  const lastClosed = Math.floor(now/duration)*duration - duration;
+  const firstNeeded = lastClosed - (target-1)*duration;
+  const byTime = new Map();
+  let pages = 0;
+  const ranges = target <= 1900
+    ? [{ from: null, to: null, size: target }]
+    : Array.from({ length: Math.ceil(target/1900) }, (_,i) => {
+        const from = firstNeeded + i*1900*duration;
+        return { from, to: Math.min(lastClosed, from+1899*duration), size: null };
+      });
+  for (const range of ranges) {
+    const url = new URL("https://api.hbdm.com/linear-swap-ex/market/history/kline");
+    const params = { contract_code: contractCode, period: periods[timeframe] };
+    if (range.size) params.size = String(Math.min(2000, range.size));
+    else { params.from = String(range.from); params.to = String(range.to); }
+    url.search = new URLSearchParams(params).toString();
+    const payload = await getJson(url);
+    if (payload.status !== "ok" || !Array.isArray(payload.data)) {
+      throw new Error(`HTX ${timeframe} history rejected: ${payload.err_msg ?? payload.status}`);
+    }
+    for (const row of payload.data) {
+      const bar = {
+        timestamp: Number(row.id)*1000, open: Number(row.open), high: Number(row.high), low: Number(row.low),
+        close: Number(row.close), volume: Number(row.vol ?? row.amount)
+      };
+      if (![bar.timestamp,bar.open,bar.high,bar.low,bar.close,bar.volume].every(Number.isFinite)) continue;
+      if (bar.timestamp + MS[timeframe] > Date.now()) continue;
+      if (bar.high < Math.max(bar.open,bar.close,bar.low) || bar.low > Math.min(bar.open,bar.close) || bar.volume < 0) continue;
+      byTime.set(bar.timestamp,bar);
+    }
+    pages += 1;
+    await sleep(300);
+  }
+  const bars = [...byTime.values()].sort((a,b)=>a.timestamp-b.timestamp).slice(-required);
+  if (bars.length < required) throw new Error(`HTX returned only ${bars.length}/${required} closed valid ${timeframe} candles across ${pages} pages`);
+  const latest = bars.at(-1).timestamp;
+  const freshnessFloor = Math.floor(Date.now()/MS[timeframe])*MS[timeframe]-2*MS[timeframe];
+  return { bars, pages, fresh: latest>=freshnessFloor, latest };
+}
+async function fetchVenueHistory(config, exchange, market, timeframe, required) {
+  if (config.id === "htx") return fetchHtxHistory(market.id || market.symbol.replace("/", "-").replace(":USDT", ""), timeframe, required);
+  return fetchHistory(exchange, market.symbol, timeframe, required);
 }
 function aggregate1hTo2h(bars) {
   const groups = new Map();
@@ -114,7 +173,7 @@ async function checkExchange(config) {
 
     let oneHour = null;
     try {
-      oneHour = await fetchHistory(exchange, btc.symbol, "1h", NEED["1h"]);
+      oneHour = await fetchVenueHistory(config, exchange, btc, "1h", NEED["1h"]);
       const cci1h = calculateCCI(oneHour.bars, 1200).at(-1);
       const ema5000 = calculateEMA(oneHour.bars.map(x=>x.close), 5000).at(-1);
       const fresh = oneHour.fresh && Number.isFinite(cci1h) && Number.isFinite(ema5000);
@@ -130,7 +189,7 @@ async function checkExchange(config) {
     let twoHour = null;
     let twoHourMethod = "native";
     if (exchange.timeframes?.["2h"]) {
-      try { twoHour = await fetchHistory(exchange, btc.symbol, "2h", NEED["2h"]); }
+      try { twoHour = await fetchVenueHistory(config, exchange, btc, "2h", NEED["2h"]); }
       catch { twoHour = null; }
     }
     if (!twoHour?.fresh && oneHour?.fresh) {
@@ -152,7 +211,7 @@ async function checkExchange(config) {
     }
 
     try {
-      const fourHour = await fetchHistory(exchange, btc.symbol, "4h", NEED["4h"]);
+      const fourHour = await fetchVenueHistory(config, exchange, btc, "4h", NEED["4h"]);
       const values = calculateLatestIndicators(fourHour.bars, { emaLength: 500, cciLength: 1200 });
       const ok = fourHour.fresh && Number.isFinite(values.ema) && Number.isFinite(values.cci);
       result.history["4h"] = { candles: fourHour.bars.length, pages: fourHour.pages, latest: new Date(fourHour.latest).toISOString(), fresh: fourHour.fresh };
@@ -165,7 +224,7 @@ async function checkExchange(config) {
     }
 
     try {
-      const fifteen = await fetchHistory(exchange, btc.symbol, "15m", NEED["15m"]);
+      const fifteen = await fetchVenueHistory(config, exchange, btc, "15m", NEED["15m"]);
       const cci15m = calculateCCI(fifteen.bars, 1200).at(-1);
       const ok = fifteen.fresh && Number.isFinite(cci15m);
       result.history["15m"] = { candles: fifteen.bars.length, pages: fifteen.pages, latest: new Date(fifteen.latest).toISOString(), fresh: fifteen.fresh };
@@ -177,7 +236,7 @@ async function checkExchange(config) {
     }
 
     try {
-      const daily = await fetchHistory(exchange, btc.symbol, "1d", NEED["1d"]);
+      const daily = await fetchVenueHistory(config, exchange, btc, "1d", NEED["1d"]);
       const closes = daily.bars.map(x=>x.close);
       const ema20 = calculateEMA(closes,20).at(-1);
       const ema50 = calculateEMA(closes,50).at(-1);
