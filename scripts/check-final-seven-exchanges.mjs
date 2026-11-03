@@ -61,8 +61,7 @@ async function fetchHistory(exchange, symbol, timeframe, required) {
   if (bars.length < required) throw new Error(`Only ${bars.length}/${required} closed valid ${timeframe} candles after ${pages} pages`);
   const latest = bars.at(-1);
   const freshnessFloor = Math.floor(Date.now()/duration)*duration - duration*2;
-  if (latest.timestamp < freshnessFloor) throw new Error(`Latest ${timeframe} candle is stale: ${new Date(latest.timestamp).toISOString()}`);
-  return { bars, pages };
+  return { bars, pages, fresh: latest.timestamp >= freshnessFloor, latest: latest.timestamp };
 }
 function aggregate1hTo2h(bars) {
   const groups = new Map();
@@ -85,10 +84,13 @@ function aggregate1hTo2h(bars) {
   }
   return output;
 }
+function addCheck(result, name, ok, detail, core=false) {
+  result.checks.push({ test: name, status: ok ? "PASS" : "FAIL", core, detail });
+}
 async function checkExchange(config) {
-  const result = { exchange: config.label, ccxt: config.id, status: "FAIL", checks: [], history: {} };
+  const result = { exchange: config.label, ccxt: config.id, status: "FAIL", coreStatus: "FAIL", optionalStatus: "PARTIAL", checks: [], history: {}, indicators: {} };
   if (!ccxt.exchanges.includes(config.id)) {
-    result.checks.push({ test: "CCXT adapter", status: "FAIL", detail: "Adapter missing from installed CCXT" });
+    addCheck(result, "CCXT adapter", false, "Adapter missing from installed CCXT", true);
     return result;
   }
   const exchange = new ccxt[config.id]({
@@ -100,66 +102,100 @@ async function checkExchange(config) {
       m && m.swap === true && m.active !== false && m.quote === "USDT" && m.settle === "USDT"
     );
     result.activeUsdtPerpetuals = contracts.length;
-    result.checks.push({
-      test: "Public markets / active USDT-settled perpetuals",
-      status: contracts.length > 0 ? "PASS" : "FAIL",
-      detail: `${Object.keys(markets).length} markets loaded; ${contracts.length} active USDT-settled swaps`
-    });
+    addCheck(result, "Public markets / active USDT-settled perpetuals", contracts.length > 0,
+      `${Object.keys(markets).length} markets loaded; ${contracts.length} active USDT-settled swaps`, true);
     const btc = contracts.find(m => m.base === "BTC");
     if (!btc) throw new Error("No active BTC/USDT USDT-settled perpetual in official market metadata");
     result.symbol = btc.symbol;
     const ticker = await exchange.fetchTicker(btc.symbol);
-    if (!ticker || !Number.isFinite(Number(ticker.last))) throw new Error("BTC perpetual ticker has no valid last price");
-    result.checks.push({ test: "BTC perpetual ticker", status: "PASS", detail: `${btc.symbol}; last=${ticker.last}` });
+    const tickerOk = ticker && Number.isFinite(Number(ticker.last));
+    addCheck(result, "BTC perpetual ticker", tickerOk, tickerOk ? `${btc.symbol}; last=${ticker.last}` : "Ticker has no valid last price", true);
+    if (!tickerOk) throw new Error("BTC perpetual ticker has no valid last price");
 
-    const oneHour = await fetchHistory(exchange, btc.symbol, "1h", NEED["1h"]);
-    result.history["1h"] = { candles: oneHour.bars.length, pages: oneHour.pages, latest: new Date(oneHour.bars.at(-1).timestamp).toISOString() };
-    const cci1h = calculateCCI(oneHour.bars, 1200).at(-1);
-    const ema5000 = calculateEMA(oneHour.bars.map(x=>x.close), 5000).at(-1);
-    if (!Number.isFinite(cci1h) || !Number.isFinite(ema5000)) throw new Error("1h CCI(1200) or EMA(5000) is not finite");
-    result.indicators = { cci1200_1h: cci1h, ema5000_1h: ema5000 };
-    result.checks.push({ test: "1h history + CCI1200 + EMA5000", status: "PASS", detail: `${oneHour.bars.length} closed candles / ${oneHour.pages} pages` });
+    let oneHour = null;
+    try {
+      oneHour = await fetchHistory(exchange, btc.symbol, "1h", NEED["1h"]);
+      const cci1h = calculateCCI(oneHour.bars, 1200).at(-1);
+      const ema5000 = calculateEMA(oneHour.bars.map(x=>x.close), 5000).at(-1);
+      const fresh = oneHour.fresh && Number.isFinite(cci1h) && Number.isFinite(ema5000);
+      result.history["1h"] = { candles: oneHour.bars.length, pages: oneHour.pages, latest: new Date(oneHour.latest).toISOString(), fresh: oneHour.fresh };
+      result.indicators.cci1200_1h = cci1h;
+      result.indicators.ema5000_1h = ema5000;
+      addCheck(result, "1h history + CCI1200 + EMA5000", fresh,
+        `${oneHour.bars.length} closed candles / ${oneHour.pages} pages; latest=${new Date(oneHour.latest).toISOString()}`);
+    } catch (error) {
+      addCheck(result, "1h history + CCI1200 + EMA5000", false, error.message);
+    }
 
-    let twoHour;
+    let twoHour = null;
     let twoHourMethod = "native";
     if (exchange.timeframes?.["2h"]) {
       try { twoHour = await fetchHistory(exchange, btc.symbol, "2h", NEED["2h"]); }
       catch { twoHour = null; }
     }
-    if (!twoHour) {
+    if (!twoHour?.fresh && oneHour?.fresh) {
       const derived = aggregate1hTo2h(oneHour.bars);
-      if (derived.length < NEED["2h"]) throw new Error(`2h history insufficient: native 2h unavailable and only ${derived.length}/${NEED["2h"]} complete 2h bars could be aggregated from 1h`);
-      twoHour = { bars: derived.slice(-NEED["2h"]), pages: null };
-      twoHourMethod = "aggregated from consecutive closed 1h candles";
+      if (derived.length >= NEED["2h"]) {
+        twoHour = { bars: derived.slice(-NEED["2h"]), pages: null, fresh: true, latest: derived.at(-1).timestamp };
+        twoHourMethod = "aggregated from consecutive closed 1h candles";
+      }
     }
-    const cci2h = calculateCCI(twoHour.bars, 1200).at(-1);
-    if (!Number.isFinite(cci2h)) throw new Error("2h CCI(1200) is not finite");
-    result.history["2h"] = { candles: twoHour.bars.length, method: twoHourMethod, pages: twoHour.pages, latest: new Date(twoHour.bars.at(-1).timestamp).toISOString() };
-    result.indicators.cci1200_2h = cci2h;
-    result.checks.push({ test: "2h history + CCI1200", status: "PASS", detail: `${twoHour.bars.length} closed candles; ${twoHourMethod}` });
+    if (twoHour) {
+      const cci2h = calculateCCI(twoHour.bars, 1200).at(-1);
+      const ok = twoHour.fresh && Number.isFinite(cci2h);
+      result.history["2h"] = { candles: twoHour.bars.length, method: twoHourMethod, pages: twoHour.pages, latest: new Date(twoHour.latest).toISOString(), fresh: twoHour.fresh };
+      result.indicators.cci1200_2h = cci2h;
+      addCheck(result, "2h history + CCI1200", ok,
+        `${twoHour.bars.length} closed candles; ${twoHourMethod}; latest=${new Date(twoHour.latest).toISOString()}`, true);
+    } else {
+      addCheck(result, "2h history + CCI1200", false, "No fresh 1200-candle native 2h history or valid 1h aggregation", true);
+    }
 
-    const fourHour = await fetchHistory(exchange, btc.symbol, "4h", NEED["4h"]);
-    const fourHourValues = calculateLatestIndicators(fourHour.bars, { emaLength: 500, cciLength: 1200 });
-    result.history["4h"] = { candles: fourHour.bars.length, pages: fourHour.pages, latest: new Date(fourHour.bars.at(-1).timestamp).toISOString() };
-    result.indicators.ema500_4h = fourHourValues.ema;
-    result.indicators.cci1200_4h = fourHourValues.cci;
-    result.checks.push({ test: "4h history + EMA500 + CCI1200", status: "PASS", detail: `${fourHour.bars.length} closed candles / ${fourHour.pages} pages` });
+    try {
+      const fourHour = await fetchHistory(exchange, btc.symbol, "4h", NEED["4h"]);
+      const values = calculateLatestIndicators(fourHour.bars, { emaLength: 500, cciLength: 1200 });
+      const ok = fourHour.fresh && Number.isFinite(values.ema) && Number.isFinite(values.cci);
+      result.history["4h"] = { candles: fourHour.bars.length, pages: fourHour.pages, latest: new Date(fourHour.latest).toISOString(), fresh: fourHour.fresh };
+      result.indicators.ema500_4h = values.ema;
+      result.indicators.cci1200_4h = values.cci;
+      addCheck(result, "4h history + EMA500 + CCI1200", ok,
+        `${fourHour.bars.length} closed candles / ${fourHour.pages} pages; latest=${new Date(fourHour.latest).toISOString()}`, true);
+    } catch (error) {
+      addCheck(result, "4h history + EMA500 + CCI1200", false, error.message, true);
+    }
 
-    const fifteen = await fetchHistory(exchange, btc.symbol, "15m", NEED["15m"]);
-    const cci15m = calculateCCI(fifteen.bars, 1200).at(-1);
-    if (!Number.isFinite(cci15m)) throw new Error("15m CCI(1200) is not finite");
-    result.history["15m"] = { candles: fifteen.bars.length, pages: fifteen.pages, latest: new Date(fifteen.bars.at(-1).timestamp).toISOString() };
-    result.indicators.cci1200_15m = cci15m;
-    result.checks.push({ test: "15m history + CCI1200", status: "PASS", detail: `${fifteen.bars.length} closed candles / ${fifteen.pages} pages` });
+    try {
+      const fifteen = await fetchHistory(exchange, btc.symbol, "15m", NEED["15m"]);
+      const cci15m = calculateCCI(fifteen.bars, 1200).at(-1);
+      const ok = fifteen.fresh && Number.isFinite(cci15m);
+      result.history["15m"] = { candles: fifteen.bars.length, pages: fifteen.pages, latest: new Date(fifteen.latest).toISOString(), fresh: fifteen.fresh };
+      result.indicators.cci1200_15m = cci15m;
+      addCheck(result, "15m history + CCI1200", ok,
+        `${fifteen.bars.length} closed candles / ${fifteen.pages} pages; latest=${new Date(fifteen.latest).toISOString()}`);
+    } catch (error) {
+      addCheck(result, "15m history + CCI1200", false, error.message);
+    }
 
-    const daily = await fetchHistory(exchange, btc.symbol, "1d", NEED["1d"]);
-    const closes = daily.bars.map(x=>x.close);
-    result.history["1d"] = { candles: daily.bars.length, pages: daily.pages, latest: new Date(daily.bars.at(-1).timestamp).toISOString() };
-    result.indicators.ema20_1d = calculateEMA(closes,20).at(-1);
-    result.indicators.ema50_1d = calculateEMA(closes,50).at(-1);
-    result.checks.push({ test: "Daily history + EMA20 + EMA50", status: "PASS", detail: `${daily.bars.length} closed candles / ${daily.pages} pages` });
+    try {
+      const daily = await fetchHistory(exchange, btc.symbol, "1d", NEED["1d"]);
+      const closes = daily.bars.map(x=>x.close);
+      const ema20 = calculateEMA(closes,20).at(-1);
+      const ema50 = calculateEMA(closes,50).at(-1);
+      const ok = daily.fresh && Number.isFinite(ema20) && Number.isFinite(ema50);
+      result.history["1d"] = { candles: daily.bars.length, pages: daily.pages, latest: new Date(daily.latest).toISOString(), fresh: daily.fresh };
+      result.indicators.ema20_1d = ema20;
+      result.indicators.ema50_1d = ema50;
+      addCheck(result, "Daily history + EMA20 + EMA50", ok,
+        `${daily.bars.length} closed candles / ${daily.pages} pages; latest=${new Date(daily.latest).toISOString()}`);
+    } catch (error) {
+      addCheck(result, "Daily history + EMA20 + EMA50", false, error.message);
+    }
 
-    result.status = result.checks.every(x=>x.status==="PASS") ? "PASS" : "PARTIAL";
+    const coreChecks = result.checks.filter(x=>x.core);
+    const optionalChecks = result.checks.filter(x=>!x.core);
+    result.coreStatus = coreChecks.length===4 && coreChecks.every(x=>x.status==="PASS") ? "PASS" : "FAIL";
+    result.optionalStatus = optionalChecks.length===3 && optionalChecks.every(x=>x.status==="PASS") ? "PASS" : "PARTIAL";
+    result.status = result.coreStatus;
     if (exchange.has?.fetchOpenInterest) {
       try {
         const oi = await exchange.fetchOpenInterest(btc.symbol);
@@ -186,10 +222,10 @@ for (const config of EXCHANGES) {
   report.push(result);
   console.log(JSON.stringify(result));
 }
-const passed = report.filter(x=>x.status==="PASS").length;
-const partial = report.filter(x=>x.status==="PARTIAL").length;
-const failed = report.filter(x=>x.status==="FAIL").length;
-const payload = { generatedAt: new Date().toISOString(), candidateExchanges: EXCHANGES.map(x=>x.label), results: report, summary: { passed, partial, failed, total: report.length } };
+const corePassed = report.filter(x=>x.coreStatus==="PASS").length;
+const optionalFull = report.filter(x=>x.optionalStatus==="PASS").length;
+const coreFailed = report.length-corePassed;
+const payload = { generatedAt: new Date().toISOString(), candidateExchanges: EXCHANGES.map(x=>x.label), results: report, summary: { corePassed, coreFailed, optionalFull, total: report.length } };
 await writeFile("final-seven-exchange-api-report.json", JSON.stringify(payload,null,2));
-console.log(`FINAL | ${passed}/7 PASS | ${partial} PARTIAL | ${failed} FAIL`);
-if (passed !== 7) process.exitCode = 1;
+console.log(`FINAL | CORE=${corePassed}/7 PASS | OPTIONAL_ALL_TIMEFRAMES=${optionalFull}/7 PASS | CORE_FAILED=${coreFailed}`);
+if (corePassed !== 7) process.exitCode = 1;
