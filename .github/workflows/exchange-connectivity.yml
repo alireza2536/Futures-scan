@@ -2,6 +2,11 @@ name: Exchange API connectivity and indicator history
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - ".github/workflows/exchange-connectivity.yml"
   push:
     branches: [main]
     paths:
@@ -22,32 +27,16 @@ jobs:
         run: node --test scripts/test-indicators.mjs
       - name: Run strict long-strategy tests
         run: node --test scripts/test-strategy.mjs
-      - name: Check public exchange connectivity
-        run: node scripts/check-exchanges.mjs
-      - name: Fetch historical candles and calculate EMA500 / CCI1200
-        run: node scripts/check-history.mjs
-      - name: Print last five closed BTC 4h candles and indicators for TradingView comparison
-        run: node scripts/compare-indicators.mjs
-      - name: Install CCXT adapters for additional exchange diagnostics
-        run: npm install --no-save --no-package-lock ccxt
-      - name: Test Bitget, Gate.io, BingX, WEEX, KuCoin, Coinbase International and HTX
-        run: node scripts/check-additional-exchanges.mjs
-      - name: Re-test HTX using its direct public API
-        continue-on-error: true
-        run: node scripts/check-target-exchanges-direct.mjs
-      - name: Test HTX 15m, 4h and daily data across BTC, ETH, SOL and XRP
-        run: node scripts/check-htx-multi-symbol.mjs
-      - name: Test HTX 1h and 2h history depth across BTC, ETH, SOL and XRP
-        run: node scripts/check-htx-1h-2h.mjs
-      - name: Diagnose HTX CCXT pagination versus direct API
-        run: node scripts/check-htx-pagination.mjs
-      - name: Upload additional exchange diagnostic results
-        if: always() && hashFiles('additional-exchange-results.json') != ''
+      - name: Test final seven exchanges across all five timeframes
+        run: node scripts/check-final-seven-exchanges.mjs
+      - name: Upload final seven-exchange API report
+        if: always() && hashFiles('final-seven-exchange-api-report.json') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: additional-exchange-diagnostics
-          path: additional-exchange-results.json
+          name: final-seven-exchange-api-report
+          path: final-seven-exchange-api-report.json
           if-no-files-found: ignore
+          retention-days: 14
       - name: Smoke-test live scanner on BTC perpetuals
         env:
           EXCHANGES: OKX,MEXC
