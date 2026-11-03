@@ -27,6 +27,8 @@ jobs:
         run: node --test scripts/test-indicators.mjs
       - name: Run strict long-strategy tests
         run: node --test scripts/test-strategy.mjs
+      - name: Install CCXT adapters for final seven exchanges
+        run: npm install --no-save --no-package-lock ccxt
       - name: Test final seven exchanges across all five timeframes
         run: node scripts/check-final-seven-exchanges.mjs
       - name: Upload final seven-exchange API report
