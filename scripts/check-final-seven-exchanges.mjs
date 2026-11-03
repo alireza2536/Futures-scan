@@ -74,6 +74,75 @@ async function getJson(url) {
     return body;
   } finally { clearTimeout(timer); }
 }
+async function getWeexJson(path, params) {
+  const url = new URL(`https://api-contract.weex.com${path}`);
+  url.search = new URLSearchParams(params).toString();
+  let lastError;
+  for (let attempt=0; attempt<4; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(()=>controller.abort(),20000);
+    try {
+      const response = await fetch(url,{headers:{accept:"application/json","user-agent":"Futures-scan-validation/1.0"},signal:controller.signal});
+      const text = await response.text();
+      let body;
+      try { body=JSON.parse(text); } catch { throw new Error(`WEEX HTTP ${response.status}: non-JSON response ${text.slice(0,120)}`); }
+      if (response.status===429) {
+        if (attempt===3) throw new Error("WEEX rate limit after retries");
+        await sleep(10000);
+        continue;
+      }
+      if (!response.ok) throw new Error(`WEEX HTTP ${response.status}: ${JSON.stringify(body).slice(0,180)}`);
+      if (body && !Array.isArray(body) && !["00000","0"].includes(String(body.code))) {
+        throw new Error(`WEEX API ${body.code}: ${body.msg ?? "unknown error"}`);
+      }
+      return Array.isArray(body) ? body : body.data;
+    } catch (error) {
+      lastError=error;
+      if (attempt===3) break;
+      await sleep(Math.min(1000*(attempt+1),5000));
+    } finally { clearTimeout(timer); }
+  }
+  throw lastError ?? new Error("WEEX request failed");
+}
+async function fetchWeex1hHistory(market, required) {
+  const timeframe="1h", duration=MS[timeframe], target=required+8, now=Date.now();
+  const contractSymbol=market.id || market.symbol.replace("/","").split(":")[0];
+  const byTime=new Map();
+  const addRows=rows=>{
+    for(const row of rows ?? []) {
+      if(!Array.isArray(row)||row.length<6) continue;
+      const bar={timestamp:Number(row[0]),open:Number(row[1]),high:Number(row[2]),low:Number(row[3]),close:Number(row[4]),volume:Number(row[5])};
+      if(![bar.timestamp,bar.open,bar.high,bar.low,bar.close,bar.volume].every(Number.isFinite)) continue;
+      if(bar.timestamp+duration>now || bar.high<Math.max(bar.open,bar.close,bar.low) || bar.low>Math.min(bar.open,bar.close) || bar.volume<0) continue;
+      byTime.set(bar.timestamp,bar);
+    }
+  };
+  let pages=0;
+  addRows(await getWeexJson("/capi/v3/market/klines",{symbol:contractSymbol,interval:"1h",limit:"1000"}));
+  pages++;
+  await sleep(250);
+  const maxPages=Math.ceil(target/100)+20;
+  while(byTime.size<target && pages<maxPages) {
+    const oldest=Math.min(...byTime.keys());
+    if(!Number.isFinite(oldest)||oldest<=0) break;
+    const cursorEnd=oldest-duration;
+    const pageStart=Math.max(0,cursorEnd-99*duration);
+    const rows=await getWeexJson("/capi/v3/market/historyKlines",{
+      symbol:contractSymbol,interval:"1h",startTime:String(Math.trunc(pageStart)),
+      endTime:String(Math.trunc(cursorEnd)),limit:"100",priceType:"LAST"
+    });
+    const before=byTime.size;
+    addRows(rows);
+    pages++;
+    if(byTime.size===before) break;
+    await sleep(300);
+  }
+  const bars=[...byTime.values()].sort((a,b)=>a.timestamp-b.timestamp).slice(-required);
+  if(!bars.length) throw new Error("WEEX direct history API returned no valid 1h candles");
+  const latest=bars.at(-1).timestamp;
+  const freshnessFloor=Math.floor(Date.now()/duration)*duration-2*duration;
+  return {bars,pages,complete:bars.length>=required,fresh:latest>=freshnessFloor,latest};
+}
 async function fetchHtxHistory(contractCode, timeframe, required) {
   const periods = { "15m": "15min", "1h": "60min", "2h": "2hour", "4h": "4hour", "1d": "1day" };
   const duration = MS[timeframe] / 1000;
@@ -116,10 +185,11 @@ async function fetchHtxHistory(contractCode, timeframe, required) {
   if (bars.length < required) throw new Error(`HTX returned only ${bars.length}/${required} closed valid ${timeframe} candles across ${pages} pages`);
   const latest = bars.at(-1).timestamp;
   const freshnessFloor = Math.floor(Date.now()/MS[timeframe])*MS[timeframe]-2*MS[timeframe];
-  return { bars, pages, fresh: latest>=freshnessFloor, latest };
+  return { bars, pages, complete: bars.length>=required, fresh: latest>=freshnessFloor, latest };
 }
 async function fetchVenueHistory(config, exchange, market, timeframe, required) {
   if (config.id === "htx") return fetchHtxHistory(market.id || market.symbol.replace("/", "-").replace(":USDT", ""), timeframe, required);
+  if (config.id === "weex" && timeframe === "1h") return fetchWeex1hHistory(market, required);
   return fetchHistory(exchange, market.symbol, timeframe, required);
 }
 function aggregate1hTo2h(bars) {
