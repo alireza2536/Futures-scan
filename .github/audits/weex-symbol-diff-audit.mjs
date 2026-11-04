@@ -11,13 +11,23 @@ const results=[];
 for(let i=0;i<missing.length;i+=10){
  const batch=missing.slice(i,i+10);
  const rs=await Promise.all(batch.map(async symbol=>{
+  const normalized=symbol.replace(/SUSDT$/,"USDT");
   try{
-   const j=await getJson(base+"/exchangeInfo?symbol="+encodeURIComponent(symbol));
-   return {symbol,rows:(j.symbols??[]).map(x=>({symbol:x.symbol,contractType:x.contractType,underlyingType:x.underlyingType,underlyingSubType:x.underlyingSubType,marginAsset:x.marginAsset,quoteAsset:x.quoteAsset,forwardContractFlag:x.forwardContractFlag})),topKeys:Object.keys(j)};
+   const [info,oi]=await Promise.all([
+    getJson(base+"/exchangeInfo?symbol="+encodeURIComponent(symbol)).catch(e=>({lookupError:String(e.message||e)})),
+    getJson(base+"/openInterest?symbol="+encodeURIComponent(symbol)).catch(e=>({oiError:String(e.message||e)}))
+   ]);
+   return {
+    symbol,normalizedAlias:normalized,normalizedAliasInPerpetualCatalog:perpSet.has(normalized),
+    normalizedAliasInTradfiCatalog:tradfiSet.has(normalized),
+    infoRows:(info.symbols??[]).map(x=>({symbol:x.symbol,contractType:x.contractType,underlyingType:x.underlyingType,underlyingSubType:x.underlyingSubType,marginAsset:x.marginAsset,quoteAsset:x.quoteAsset,forwardContractFlag:x.forwardContractFlag})),
+    infoError:info.lookupError??null,oiError:oi.oiError??null,
+    oiSymbol:oi.symbol??null,openInterest:oi.openInterest??null
+   };
   }catch(e){return {symbol,error:String(e.message||e)}}
  }));
  results.push(...rs);
 }
-const report={generatedAt:new Date().toISOString(),counts:{perpetualCatalog:perpRows.length,tradfiCatalog:tradfiRows.length,apiTradingSymbols:apiSet.size,missingFromBothCatalogs:missing.length},missingSymbols:missing,lookupResults:results};
+const report={generatedAt:new Date().toISOString(),counts:{perpetualCatalog:perpRows.length,tradfiCatalog:tradfiRows.length,apiTradingSymbols:apiSet.size,missingFromBothCatalogs:missing.length,normalizedAliasesInCatalog:results.filter(x=>x.normalizedAliasInPerpetualCatalog||x.normalizedAliasInTradfiCatalog).length,oiEndpointSuccess:results.filter(x=>Number(x.openInterest)>0).length},missingSymbols:missing,lookupResults:results};
 await (await import("node:fs/promises")).writeFile("weex-symbol-diff-audit.json",JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));
