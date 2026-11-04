@@ -299,21 +299,44 @@ const referenceBases = new Set([
   ...(report.venues.KuCoin?.activeUsdtCryptoCandidate?.bases ?? []),
   ...(report.venues.XT?.cryptoOnlyCandidate?.bases ?? [])
 ].map(baseFromPair).filter(Boolean));
+const knownNonCryptoBases = new Set([
+  ...(report.venues.BingX?.knownNonCryptoByOfficialAssetPrefix?.assets ?? []),
+  ...(report.venues.WEEX?.knownNonCryptoByOfficialMetadata?.symbols ?? []),
+  ...(report.venues.KuCoin?.knownNonCryptoByOfficialMetadata?.bases ?? []),
+  ...(report.venues.XT?.nonCryptoUsdtPerpetual?.bases ?? [])
+].map(baseFromPair).filter(Boolean));
 const htxCodes = report.venues.HTX?.activeUsdtSwapCandidate?.contractCodes ?? [];
-const htxCrossExchange = htxCodes.filter(code => referenceBases.has(baseFromPair(code)));
+const htxNonCrypto = htxCodes.filter(code => knownNonCryptoBases.has(baseFromPair(code)));
+const htxCryptoCandidate = htxCodes.filter(code => !knownNonCryptoBases.has(baseFromPair(code)));
 const bingxRows = report.venues.BingX?.activeUsdtCandidate?.assets ?? [];
 const bingxCrossExchange = bingxRows.filter(asset =>
   referenceBases.has(baseFromPair(asset)) &&
-  !["NCCO", "NCFX", "NCS"].some(prefix => String(asset).toUpperCase().startsWith(prefix))
+  !knownNonCryptoBases.has(baseFromPair(asset))
 );
 const weexRows = report.venues.WEEX?.nonTradFiCandidate?.symbols ?? [];
-const weexCrossExchange = weexRows.filter(symbol => referenceBases.has(baseFromPair(symbol)));
+const weexCrossExchange = weexRows.filter(symbol =>
+  referenceBases.has(baseFromPair(symbol)) &&
+  !knownNonCryptoBases.has(baseFromPair(symbol))
+);
 report.crossExchangeCryptoReference = {
   referenceBaseCount: referenceBases.size,
+  knownNonCryptoBaseCount: knownNonCryptoBases.size,
   referenceBases: [...referenceBases].sort(),
+  knownNonCryptoBases: [...knownNonCryptoBases].sort(),
   BingX: { count: bingxCrossExchange.length, assets: bingxCrossExchange },
   WEEX: { count: weexCrossExchange.length, symbols: weexCrossExchange },
-  HTX: { count: htxCrossExchange.length, contractCodes: htxCrossExchange }
+  HTX: {
+    nonCryptoCount: htxNonCrypto.length,
+    nonCryptoContractCodes: htxNonCrypto,
+    cryptoCandidateCount: htxCryptoCandidate.length,
+    cryptoCandidateContractCodes: htxCryptoCandidate
+  },
+  MEXC: {
+    nonCryptoCount: (report.venues.MEXC?.activeUsdtPerpetualCandidate?.bases ?? []).filter(base => knownNonCryptoBases.has(baseFromPair(base))).length
+  },
+  OKX: {
+    nonCryptoCount: (report.venues.OKX?.activeUsdtSwapCandidate?.bases ?? []).filter(base => knownNonCryptoBases.has(baseFromPair(base))).length
+  }
 };
 
 await writeFile("seven-exchange-universe-audit.json", JSON.stringify(report, null, 2));
