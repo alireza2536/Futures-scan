@@ -30,12 +30,19 @@ if(!Array.isArray(catalog?.symbols)||!Array.isArray(tradfi?.symbols)||!Array.isA
 const tradfiSet=new Set(tradfi.symbols.map(x=>String(x?.symbol??"").toUpperCase()).filter(Boolean));
 const tradableSet=new Set(apiTrading.map(x=>String(x).toUpperCase()).filter(Boolean));
 const contractSymbolSet=new Set(catalog.symbols.map(x=>String(x?.symbol??"").toUpperCase()).filter(Boolean));
+const canonicalCryptoSet=new Set(catalog.symbols.filter(row=>
+ row?.contractType==="PERPETUAL"&&
+ String(row?.underlyingType??"").toUpperCase()==="COIN"&&
+ String(row?.symbol??"").toUpperCase().endsWith("USDT")&&
+ String(row?.marginAsset??row?.quoteAsset??"USDT").toUpperCase()==="USDT"&&
+ !tradfiSet.has(String(row?.symbol??"").toUpperCase())
+).map(row=>String(row.symbol).toUpperCase()));
 const statusCounts={};
 let statusFieldPresent=0;
 for(const row of catalog.symbols){const s=String(row?.status??"").toUpperCase();if(s)statusFieldPresent++;statusCounts[s||"MISSING"]=(statusCounts[s||"MISSING"]||0)+1;}
 const canonicalApiSet=new Set([...tradableSet].map(symbol=>{
  const alias=symbol.replace(/SUSDT$/,"USDT");
- return contractSymbolSet.has(alias)?alias:symbol;
+ return canonicalCryptoSet.has(alias)?alias:symbol;
 }));
 const contractCandidates=catalog.symbols.filter(row=>{
  const symbol=String(row?.symbol??"");
