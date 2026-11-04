@@ -1,6 +1,7 @@
 import ccxt from "ccxt";
 import { writeFile } from "node:fs/promises";
 import { calculateCCI, calculateEMA, calculateLatestIndicators } from "./indicators.mjs";
+import { fetchBingXHistory } from "./market-data.mjs";
 
 const EXCHANGES = [
   { label: "MEXC", id: "mexc" },
@@ -201,6 +202,7 @@ async function fetchHtxHistory(contractCode, timeframe, required) {
   return { bars, pages, complete: bars.length>=required, fresh: latest>=freshnessFloor, latest };
 }
 async function fetchVenueHistory(config, exchange, market, timeframe, required) {
+  if (config.id === "bingx") return fetchBingXHistory({ symbol: market.symbol, marketId: market.id, interval: timeframe, count: required });
   if (config.id === "htx") return fetchHtxHistory(market.id || market.symbol.replace("/", "-").replace(":USDT", ""), timeframe, required);
   if (config.id === "weex" && timeframe === "1h") return fetchWeex1hHistory(market, required);
   return fetchHistory(exchange, market.symbol, timeframe, required);
