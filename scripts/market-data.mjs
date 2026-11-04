@@ -1,12 +1,12 @@
 const DEFAULT_TIMEOUT_MS = 20000;
 
-async function requestJson(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
+async function requestJson(url, timeoutMs = DEFAULT_TIMEOUT_MS, extraHeaders = {}) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, {
-        headers: { accept: "application/json", "user-agent": "Futures-scan/0.2" },
+        headers: { accept: "application/json", "user-agent": "Futures-scan/0.2", ...extraHeaders },
         signal: controller.signal
       });
       const body = await response.json();
@@ -134,7 +134,7 @@ export async function fetchBingXHistory({
     }
     const params = new URLSearchParams(paramsObject);
     const requestUrl = `${base}/openApi/swap/v3/quote/klines?${params}`;
-    const payload = await requestJson(requestUrl);
+    const payload = await requestJson(requestUrl, DEFAULT_TIMEOUT_MS, { "X-SOURCE-KEY": "BX-AI-SKILL" });
     lastPageInfo = { url: requestUrl, code: payload?.code, message: payload?.msg, dataLength: Array.isArray(payload?.data) ? payload.data.length : null, sample: Array.isArray(payload?.data) ? payload.data[0] ?? null : payload?.data };
     if (Number(payload?.code) !== 0 || !Array.isArray(payload?.data)) {
       throw new Error(`BingX ${interval} kline rejected for ${contractSymbol}: ${payload?.msg ?? payload?.code ?? "invalid response"}`);
