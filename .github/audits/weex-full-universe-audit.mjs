@@ -29,10 +29,14 @@ const [catalog,tradfi,apiTrading]=await Promise.all([
 if(!Array.isArray(catalog?.symbols)||!Array.isArray(tradfi?.symbols)||!Array.isArray(apiTrading))throw new Error("WEEX contract/tradfi/tradable catalog schema invalid");
 const tradfiSet=new Set(tradfi.symbols.map(x=>String(x?.symbol??"").toUpperCase()).filter(Boolean));
 const tradableSet=new Set(apiTrading.map(x=>String(x).toUpperCase()).filter(Boolean));
+const contractSymbolSet=new Set(catalog.symbols.map(x=>String(x?.symbol??"").toUpperCase()).filter(Boolean));
 const statusCounts={};
 let statusFieldPresent=0;
 for(const row of catalog.symbols){const s=String(row?.status??"").toUpperCase();if(s)statusFieldPresent++;statusCounts[s||"MISSING"]=(statusCounts[s||"MISSING"]||0)+1;}
-const normalizedApiSet=new Set([...tradableSet].map(symbol=>symbol.replace(/SUSDT$/,"USDT")));
+const canonicalApiSet=new Set([...tradableSet].map(symbol=>{
+ const alias=symbol.replace(/SUSDT$/,"USDT");
+ return contractSymbolSet.has(alias)?alias:symbol;
+}));
 const contractCandidates=catalog.symbols.filter(row=>{
  const symbol=String(row?.symbol??"");
  const status=String(row?.status??"").toUpperCase();
@@ -40,6 +44,7 @@ const contractCandidates=catalog.symbols.filter(row=>{
  String(row?.underlyingType??"").toUpperCase()==="COIN"&&
  symbol.toUpperCase().endsWith("USDT")&&
  !tradfiSet.has(symbol.toUpperCase())&&
+ canonicalApiSet.has(symbol.toUpperCase())&&
  (!status||["TRADING","OPEN","1"].includes(status))&&
  String(row?.marginAsset??row?.quoteAsset??"USDT").toUpperCase()==="USDT";
 });
@@ -54,18 +59,21 @@ const oiResults=await mapLimit(symbols,4,async symbol=>{
 const passed=oiResults.filter(x=>x?.ok).length;
 const failed=oiResults.filter(x=>!x?.ok);
 const eligibleSet=new Set(symbols.map(x=>x.toUpperCase()));
-const eligibleNotInApiTrading=symbols.filter(s=>!tradableSet.has(s.toUpperCase()));
-const eligibleCoveredByAlias=symbols.filter(s=>!tradableSet.has(s.toUpperCase())&&normalizedApiSet.has(s.toUpperCase()));
+const eligibleNotExactApiTrading=symbols.filter(s=>!tradableSet.has(s.toUpperCase()));
+const eligibleCoveredByAlias=symbols.filter(s=>!tradableSet.has(s.toUpperCase())&&canonicalApiSet.has(s.toUpperCase()));
 const tradableNotEligible=[...tradableSet].filter(s=>!eligibleSet.has(s));
 const tradableTradfiOverlap=tradableNotEligible.filter(s=>tradfiSet.has(s));
 const tradableUnclassified=tradableNotEligible.filter(s=>!tradfiSet.has(s));
-const unresolvedApiSymbols=tradableUnclassified.filter(s=>!catalog.symbols.some(row=>String(row?.symbol??"").toUpperCase()===s));
+const unresolvedApiSymbols=tradableUnclassified.filter(s=>{
+ const alias=s.replace(/SUSDT$/,"USDT");
+ return !contractSymbolSet.has(s)&&!contractSymbolSet.has(alias);
+});
 const report={
  generatedAt:new Date().toISOString(),
  catalogs:{perpetualRows:catalog.symbols.length,tradfiRows:tradfi.symbols.length,apiTradingSymbols:apiTrading.length,statusFieldPresent,statusFieldMissing:catalog.symbols.length-statusFieldPresent,statusCounts},
- filtering:{tradfiSymbolsExcluded:tradfiSet.size,contractCandidates:contractCandidates.length,uniqueEligibleSymbols:symbols.length,eligibleNotExactApiTrading:eligibleNotInApiTrading.length,eligibleCoveredByAlias:eligibleCoveredByAlias.length,tradableNotEligible:tradableNotEligible.length,tradableTradfiOverlap:tradableTradfiOverlap.length,tradableUnclassified:tradableUnclassified.length,unresolvedApiSymbols:unresolvedApiSymbols.length,unresolvedExamples:unresolvedApiSymbols.slice(0,30)},
+ filtering:{tradfiSymbolsExcluded:tradfiSet.size,contractCandidates:contractCandidates.length,uniqueEligibleSymbols:symbols.length,eligibleNotExactApiTrading:eligibleNotExactApiTrading.length,eligibleCoveredByAlias:eligibleCoveredByAlias.length,tradableNotEligible:tradableNotEligible.length,tradableTradfiOverlap:tradableTradfiOverlap.length,tradableUnclassified:tradableUnclassified.length,unresolvedApiSymbols:unresolvedApiSymbols.length,unresolvedExamples:unresolvedApiSymbols.slice(0,30)},
  openInterest:{requested:symbols.length,passed,failed:failed.length,failedSymbols:failed},
- result:symbols.length>0&&passed===symbols.length&&eligibleCoveredByAlias.length===eligibleNotInApiTrading.length?"PASS":"FAIL"
+ result:symbols.length>0&&passed===symbols.length&&eligibleCoveredByAlias.length===eligibleNotExactApiTrading.length?"PASS":"FAIL"
 };
 await (await import("node:fs/promises")).writeFile("weex-full-universe-audit.json",JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));
