@@ -1,13 +1,13 @@
 const TIMEOUT_MS = 25000;
 
-async function getJson(url) {
+async function getJson(url, extraHeaders = {}) {
   let lastError;
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const response = await fetch(url, {
-        headers: { accept: "application/json", "user-agent": "Futures-scan/0.5" },
+        headers: { accept: "application/json", "user-agent": "Futures-scan/0.5", ...extraHeaders },
         signal: controller.signal
       });
       const body = await response.json();
@@ -160,7 +160,7 @@ async function getOkxSymbols() {
 }
 
 async function getBingxSymbols() {
-  const payload = await getJson("https://open-api.bingx.com/openApi/swap/v2/quote/contracts");
+  const payload = await getJson("https://open-api.bingx.com/openApi/swap/v2/quote/contracts", { "X-SOURCE-KEY": "BX-AI-SKILL" });
   if (!(payload?.code === 0 || payload?.code === "0") || !Array.isArray(payload?.data)) {
     throw new Error("BingX contract catalog schema/status check failed");
   }
