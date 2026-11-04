@@ -1,6 +1,6 @@
 import ccxt from "ccxt";
 import { writeFile } from "node:fs/promises";
-import { fetchOkxHistory, fetchMexcHistory, fetchCcxtHistory } from "./market-data.mjs";
+import { fetchOkxHistory, fetchMexcHistory, fetchCcxtHistory, fetchWeexHistory, fetchHtxHistory } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
 
@@ -68,6 +68,8 @@ async function scanSymbol(item,clients) {
     let raw;
     if(item.exchange==="OKX") raw=await fetchOkxHistory({base:item.apiBase,instId:item.symbol,bar:"4H",count:CANDLE_COUNT});
     else if(item.exchange==="MEXC") raw=await fetchMexcHistory({symbol:item.symbol,interval:"4h",count:CANDLE_COUNT});
+    else if(item.exchange==="WEEX") raw=await fetchWeexHistory({symbol:item.symbol,marketId:item.marketId,interval:"4h",count:CANDLE_COUNT+10});
+    else if(item.exchange==="HTX") raw=await fetchHtxHistory({symbol:item.symbol,marketId:item.marketId,interval:"4h",count:CANDLE_COUNT+10});
     else raw=await fetchCcxtHistory(clients.get(item.exchange),{symbol:item.symbol,interval:"4h",count:CANDLE_COUNT});
     const bars=keepClosedFourHourCandles(raw);
     if(bars.length<1201) throw new Error("not enough closed candles: "+bars.length+"/1201");
