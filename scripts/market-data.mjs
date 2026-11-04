@@ -124,12 +124,14 @@ export async function fetchBingXHistory({
   let pages = 0;
   const maxPages = Math.ceil(target / 1400) + 3;
   while (byTime.size < target && pages < maxPages) {
-    const limit = Math.min(1440, Math.max(100, target - byTime.size + 8));
-    const startTime = Math.max(0, endTime - (limit + 2) * duration);
-    const params = new URLSearchParams({
-      symbol: contractSymbol, interval, startTime: String(Math.trunc(startTime)),
-      endTime: String(Math.trunc(endTime)), limit: String(limit)
-    });
+    const limit = Math.min(1000, Math.max(100, target - byTime.size + 8));
+    const paramsObject = { symbol: contractSymbol, interval, limit: String(limit) };
+    if (pages > 0) {
+      const startTime = Math.max(0, endTime - (limit + 2) * duration);
+      paramsObject.startTime = String(Math.trunc(startTime));
+      paramsObject.endTime = String(Math.trunc(endTime));
+    }
+    const params = new URLSearchParams(paramsObject);
     const payload = await requestJson(`${base}/openApi/swap/v3/quote/klines?${params}`);
     if (Number(payload?.code) !== 0 || !Array.isArray(payload?.data)) {
       throw new Error(`BingX ${interval} kline rejected for ${contractSymbol}: ${payload?.msg ?? payload?.code ?? "invalid response"}`);
