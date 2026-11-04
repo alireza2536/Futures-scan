@@ -258,10 +258,40 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   }
 }
 
+const baseFromPair = value => String(value ?? "").toUpperCase()
+  .replace(/[_-]USDTM?$/, "")
+  .replace(/[_-]USDT$/, "")
+  .replace(/USDTM?$/, "")
+  .replace(/[_-]/g, "");
+const referenceBases = new Set([
+  ...(report.venues.MEXC?.activeUsdtPerpetualCandidate?.bases ?? []),
+  ...(report.venues.OKX?.activeUsdtSwapCandidate?.bases ?? []),
+  ...(report.venues.KuCoin?.activeUsdtCryptoCandidate?.bases ?? []),
+  ...(report.venues.XT?.cryptoOnlyCandidate?.bases ?? [])
+].map(baseFromPair).filter(Boolean));
+const htxCodes = report.venues.HTX?.activeUsdtSwapCandidate?.contractCodes ?? [];
+const htxCrossExchange = htxCodes.filter(code => referenceBases.has(baseFromPair(code)));
+const bingxRows = report.venues.BingX?.activeUsdtCandidate?.assets ?? [];
+const bingxCrossExchange = bingxRows.filter(asset =>
+  referenceBases.has(baseFromPair(asset)) &&
+  !["NCCO", "NCFX", "NCS"].some(prefix => String(asset).toUpperCase().startsWith(prefix))
+);
+const weexRows = report.venues.WEEX?.nonTradFiCandidate?.symbols ?? [];
+const weexCrossExchange = weexRows.filter(symbol => referenceBases.has(baseFromPair(symbol)));
+report.crossExchangeCryptoReference = {
+  referenceBaseCount: referenceBases.size,
+  referenceBases: [...referenceBases].sort(),
+  BingX: { count: bingxCrossExchange.length, assets: bingxCrossExchange },
+  WEEX: { count: weexCrossExchange.length, symbols: weexCrossExchange },
+  HTX: { count: htxCrossExchange.length, contractCodes: htxCrossExchange }
+};
+
 await writeFile("seven-exchange-universe-audit.json", JSON.stringify(report, null, 2));
 for (const [name, venue] of Object.entries(report.venues)) {
-  const candidateKey = Object.keys(venue).find(key => key !== "all");
-  console.log(`UNIVERSE_AUDIT | ${name} | all=${venue.all.count} | ${candidateKey}=${venue[candidateKey].count}`);
-  console.log(`UNIVERSE_FIELDS | ${name} | ${JSON.stringify(venue.all.fields)}`);
+  const countSummary = Object.entries(venue)
+    .filter(([key, value]) => key !== "all" && value && typeof value === "object" && Number.isFinite(value.count))
+    .map(([key, value]) => `${key}=${value.count}`).join(" ");
+  console.log(`UNIVERSE_AUDIT | ${name} | all=${venue.all?.count ?? "unknown"} | ${countSummary}`);
 }
+console.log(`CROSS_EXCHANGE_CRYPTO | refs=${referenceBases.size} | BingX=${bingxCrossExchange.length} | WEEX=${weexCrossExchange.length} | HTX=${htxCrossExchange.length}`);
 console.log("UNIVERSE_AUDIT_FILE | seven-exchange-universe-audit.json");
