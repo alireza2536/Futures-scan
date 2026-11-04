@@ -13,16 +13,19 @@ for(let i=0;i<missing.length;i+=10){
  const rs=await Promise.all(batch.map(async symbol=>{
   const normalized=symbol.replace(/SUSDT$/,"USDT");
   try{
-   const [info,oi]=await Promise.all([
+   const [info,oi,normalizedOi]=await Promise.all([
     getJson(base+"/exchangeInfo?symbol="+encodeURIComponent(symbol)).catch(e=>({lookupError:String(e.message||e)})),
-    getJson(base+"/openInterest?symbol="+encodeURIComponent(symbol)).catch(e=>({oiError:String(e.message||e)}))
+    getJson(base+"/openInterest?symbol="+encodeURIComponent(symbol)).catch(e=>({oiError:String(e.message||e)})),
+    normalized!==symbol?getJson(base+"/openInterest?symbol="+encodeURIComponent(normalized)).catch(e=>({oiError:String(e.message||e)})):Promise.resolve({})
    ]);
    return {
     symbol,normalizedAlias:normalized,normalizedAliasInPerpetualCatalog:perpSet.has(normalized),
     normalizedAliasInTradfiCatalog:tradfiSet.has(normalized),
     infoRows:(info.symbols??[]).map(x=>({symbol:x.symbol,contractType:x.contractType,underlyingType:x.underlyingType,underlyingSubType:x.underlyingSubType,marginAsset:x.marginAsset,quoteAsset:x.quoteAsset,forwardContractFlag:x.forwardContractFlag})),
     infoError:info.lookupError??null,oiError:oi.oiError??null,
-    oiSymbol:oi.symbol??null,openInterest:oi.openInterest??null
+    oiSymbol:oi.symbol??null,openInterest:oi.openInterest??null,
+    normalizedOiError:normalizedOi.oiError??null,normalizedOiSymbol:normalizedOi.symbol??null,
+    normalizedOpenInterest:normalizedOi.openInterest??null
    };
   }catch(e){return {symbol,error:String(e.message||e)}}
  }));
