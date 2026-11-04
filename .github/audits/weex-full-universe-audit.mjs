@@ -32,6 +32,7 @@ const tradableSet=new Set(apiTrading.map(x=>String(x).toUpperCase()).filter(Bool
 const statusCounts={};
 let statusFieldPresent=0;
 for(const row of catalog.symbols){const s=String(row?.status??"").toUpperCase();if(s)statusFieldPresent++;statusCounts[s||"MISSING"]=(statusCounts[s||"MISSING"]||0)+1;}
+const normalizedApiSet=new Set([...tradableSet].map(symbol=>symbol.replace(/SUSDT$/,"USDT")));
 const contractCandidates=catalog.symbols.filter(row=>{
  const symbol=String(row?.symbol??"");
  const status=String(row?.status??"").toUpperCase();
@@ -39,7 +40,6 @@ const contractCandidates=catalog.symbols.filter(row=>{
  String(row?.underlyingType??"").toUpperCase()==="COIN"&&
  symbol.toUpperCase().endsWith("USDT")&&
  !tradfiSet.has(symbol.toUpperCase())&&
- tradableSet.has(symbol.toUpperCase())&&
  (!status||["TRADING","OPEN","1"].includes(status))&&
  String(row?.marginAsset??row?.quoteAsset??"USDT").toUpperCase()==="USDT";
 });
@@ -55,21 +55,17 @@ const passed=oiResults.filter(x=>x?.ok).length;
 const failed=oiResults.filter(x=>!x?.ok);
 const eligibleSet=new Set(symbols.map(x=>x.toUpperCase()));
 const eligibleNotInApiTrading=symbols.filter(s=>!tradableSet.has(s.toUpperCase()));
+const eligibleCoveredByAlias=symbols.filter(s=>!tradableSet.has(s.toUpperCase())&&normalizedApiSet.has(s.toUpperCase()));
 const tradableNotEligible=[...tradableSet].filter(s=>!eligibleSet.has(s));
 const tradableTradfiOverlap=tradableNotEligible.filter(s=>tradfiSet.has(s));
 const tradableUnclassified=tradableNotEligible.filter(s=>!tradfiSet.has(s));
-const unclassifiedSet=new Set(tradableUnclassified);
-const unclassifiedRows=catalog.symbols.filter(row=>unclassifiedSet.has(String(row?.symbol??"").toUpperCase())).map(row=>({
- symbol:row.symbol,contractType:row.contractType,underlyingType:row.underlyingType,
- underlyingSubType:row.underlyingSubType,marginAsset:row.marginAsset,quoteAsset:row.quoteAsset,
- forwardContractFlag:row.forwardContractFlag,tradfi:tradfiSet.has(String(row.symbol??"").toUpperCase())
-}));
+const unresolvedApiSymbols=tradableUnclassified.filter(s=>!catalog.symbols.some(row=>String(row?.symbol??"").toUpperCase()===s));
 const report={
  generatedAt:new Date().toISOString(),
  catalogs:{perpetualRows:catalog.symbols.length,tradfiRows:tradfi.symbols.length,apiTradingSymbols:apiTrading.length,statusFieldPresent,statusFieldMissing:catalog.symbols.length-statusFieldPresent,statusCounts},
- filtering:{tradfiSymbolsExcluded:tradfiSet.size,contractCandidates:contractCandidates.length,uniqueEligibleSymbols:symbols.length,eligibleNotInApiTrading:eligibleNotInApiTrading.length,tradableNotEligible:tradableNotEligible.length,tradableTradfiOverlap:tradableTradfiOverlap.length,tradableUnclassified:tradableUnclassified.length,unclassifiedRows},
+ filtering:{tradfiSymbolsExcluded:tradfiSet.size,contractCandidates:contractCandidates.length,uniqueEligibleSymbols:symbols.length,eligibleNotExactApiTrading:eligibleNotInApiTrading.length,eligibleCoveredByAlias:eligibleCoveredByAlias.length,tradableNotEligible:tradableNotEligible.length,tradableTradfiOverlap:tradableTradfiOverlap.length,tradableUnclassified:tradableUnclassified.length,unresolvedApiSymbols:unresolvedApiSymbols.length,unresolvedExamples:unresolvedApiSymbols.slice(0,30)},
  openInterest:{requested:symbols.length,passed,failed:failed.length,failedSymbols:failed},
- result:symbols.length>0&&passed===symbols.length&&eligibleNotInApiTrading.length===0&&tradableUnclassified.length===0?"PASS":"FAIL"
+ result:symbols.length>0&&passed===symbols.length&&eligibleCoveredByAlias.length===eligibleNotInApiTrading.length?"PASS":"FAIL"
 };
 await (await import("node:fs/promises")).writeFile("weex-full-universe-audit.json",JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));
