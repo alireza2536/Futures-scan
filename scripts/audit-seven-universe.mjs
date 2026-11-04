@@ -323,6 +323,28 @@ const referenceBases = new Set([
   ...(report.venues.KuCoin?.activeUsdtCryptoCandidate?.bases ?? []),
   ...(report.venues.XT?.cryptoOnlyCandidate?.bases ?? [])
 ].map(baseFromPair).filter(Boolean));
+const geckoRows = await getJson("https://api.coingecko.com/api/v3/coins/list?include_platform=false");
+if (!Array.isArray(geckoRows)) throw new Error("CoinGecko coin list response was not an array");
+const geckoSymbols = new Set(geckoRows.map(x => String(x.symbol ?? "").toUpperCase()).filter(Boolean));
+const htxCandidateCodes = report.venues.HTX?.activeUsdtSwapCandidate?.contractCodes ?? [];
+const htxGeckoMatched = htxCandidateCodes.filter(code => geckoSymbols.has(baseFromPair(code)));
+const htxGeckoMatchedNonTradFi = htxGeckoMatched.filter(code => !knownNonCryptoBases.has(baseFromPair(code)));
+report.coingeckoReference = {
+  coinListCount: geckoRows.length,
+  uniqueSymbols: geckoSymbols.size,
+  HTX: {
+    geckoSymbolMatches: htxGeckoMatched.length,
+    geckoMatchesAfterOfficialTradFiExclusions: htxGeckoMatchedNonTradFi.length,
+    geckoMatchedContractCodes: htxGeckoMatched,
+    geckoMatchedNonTradFiContractCodes: htxGeckoMatchedNonTradFi
+  },
+  MEXC: {
+    geckoSymbolMatches: (report.venues.MEXC?.activeUsdtPerpetualCandidate?.bases ?? []).filter(base => geckoSymbols.has(baseFromPair(base))).length
+  },
+  OKX: {
+    geckoSymbolMatches: (report.venues.OKX?.activeUsdtSwapCandidate?.bases ?? []).filter(base => geckoSymbols.has(baseFromPair(base))).length
+  }
+};
 const knownNonCryptoBases = new Set([
   ...(report.venues.BingX?.knownNonCryptoByOfficialAssetPrefix?.assets ?? []),
   ...(report.venues.WEEX?.knownNonCryptoByOfficialMetadata?.symbols ?? []),
@@ -370,5 +392,5 @@ for (const [name, venue] of Object.entries(report.venues)) {
     .map(([key, value]) => `${key}=${value.count}`).join(" ");
   console.log(`UNIVERSE_AUDIT | ${name} | all=${venue.all?.count ?? "unknown"} | ${countSummary}`);
 }
-console.log(`CROSS_EXCHANGE_CRYPTO | refs=${referenceBases.size} | BingX=${bingxCrossExchange.length} | WEEX=${weexCrossExchange.length} | HTX_crypto_candidate=${htxCryptoCandidate.length} | HTX_known_noncrypto=${htxNonCrypto.length}`);
+console.log(`CROSS_EXCHANGE_CRYPTO | refs=${referenceBases.size} | BingX=${bingxCrossExchange.length} | WEEX=${weexCrossExchange.length} | HTX_crypto_candidate=${htxCryptoCandidate.length} | HTX_known_noncrypto=${htxNonCrypto.length} | HTX_CoinGecko=${htxGeckoMatched.length}`);
 console.log("UNIVERSE_AUDIT_FILE | seven-exchange-universe-audit.json");
