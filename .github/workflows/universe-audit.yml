@@ -1,0 +1,32 @@
+name: Seven-exchange official universe audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/audit-seven-universe.mjs"
+      - ".github/workflows/universe-audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/audit-seven-universe.mjs"
+      - ".github/workflows/universe-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit official futures symbol metadata
+        run: node scripts/audit-seven-universe.mjs
+      - name: Upload official universe audit
+        if: always() && hashFiles('seven-exchange-universe-audit.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: seven-exchange-official-universe-audit
+          path: seven-exchange-universe-audit.json
+          retention-days: 14
