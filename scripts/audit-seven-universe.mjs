@@ -35,6 +35,35 @@ const summarize = (rows, fields) => ({
   fields: Object.fromEntries(fields.map(field => [field, unique(rows.map(row => row?.[field]))])),
   samples: rows.slice(0, 5)
 });
+function isExplicitTradFiContract(row) {
+  const fields = [
+    row?.assetClass, row?.asset_class, row?.assetType, row?.asset_type,
+    row?.baseAssetType, row?.baseAssetSubType, row?.base_asset_type, row?.base_asset_sub_type,
+    row?.marketType, row?.market_type, row?.businessType, row?.business_type,
+    row?.productType, row?.product_type, row?.category, row?.symbolType,
+    row?.symbol_type, row?.instrumentType, row?.instrument_type,
+    row?.underlyingType, row?.underlying_type
+  ];
+  const normalized = fields.filter(x => x != null && String(x).trim() !== "")
+    .map(x => String(x).trim().toLowerCase().replace(/[\\s_-]+/g, ""));
+  const names = [
+    row?.baseCoinName, row?.baseCoinNameEn, row?.enName, row?.enDesc,
+    row?.cnName, row?.cnDesc, row?.displayName, row?.description
+  ].filter(x => x != null && String(x).trim() !== "").map(x => String(x).trim().toLowerCase());
+  return normalized.some(x => /^(tradfi|traditionalfinance|stock|stocks|equity|equities|forex|fx|commodity|commodities|index|indices|metal|metals|energy)$/.test(x)) ||
+    names.some(x => /(stock|equity|share|forex|commodity|commodities|indices|index|metal|metals|gold|silver|crude|oil|natural gas|sp500|s&p|nasdaq|dow jones|nikkei|jp225|us30)/i.test(x));
+}
+function hasHtxOfficialTradFiLabel(row) {
+  const labels = [
+    ...(Array.isArray(row?.labels) ? row.labels : []),
+    ...(Array.isArray(row?.tradfi_labels) ? row.tradfi_labels : [])
+  ].map(x => String(x ?? "").trim().toLowerCase().replace(/[\\s_-]+/g, ""));
+  return labels.some(x => /^(tradfi|traditionalfinance|stock|stocks|equity|equities|forex|fx|commodity|commodities|index|indices|metal|metals|energy|etf|preipo)$/.test(x));
+}
+function isBingXTradFiSymbol(symbol) {
+  const base = String(symbol ?? "").split("-")[0].toUpperCase();
+  return /^(NCS|NCCO|NCF)/.test(base);
+}
 
 const report = { generatedAt: new Date().toISOString(), venues: {} };
 
@@ -45,9 +74,10 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   if (payload?.success !== true || !Array.isArray(rows)) throw new Error("MEXC contract detail response shape was not recognized");
   const candidate = rows.filter(x =>
     Number(x.state) === 0 &&
-    String(x.quoteCoin).toUpperCase() === "USDT" &&
     String(x.settleCoin).toUpperCase() === "USDT" &&
-    (x.futureType == null || Number(x.futureType) === 1)
+    String(x.symbol ?? "").endsWith("_USDT") &&
+    Number(x.typeLabel) === 0 &&
+    !isExplicitTradFiContract(x)
   );
   const spotPayload = await getJson("https://api.mexc.com/api/v3/exchangeInfo");
   const spotRows = Array.isArray(spotPayload?.symbols) ? spotPayload.symbols : [];
@@ -76,7 +106,8 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   if (String(payload?.code) !== "0" || !Array.isArray(rows)) throw new Error("OKX instruments response shape was not recognized");
   const candidate = rows.filter(x =>
     x.state === "live" &&
-    String(x.settleCcy).toUpperCase() === "USDT"
+    String(x.settleCcy).toUpperCase() === "USDT" &&
+    String(x.instCategory) === "1"
   );
   const spotPayload = await getJson("https://www.okx.com/api/v5/public/instruments?instType=SPOT");
   const spotRows = Array.isArray(spotPayload?.data) ? spotPayload.data : [];
@@ -102,7 +133,11 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const payload = await getJson("https://open-api.bingx.com/openApi/swap/v2/quote/contracts");
   const rows = Array.isArray(payload?.data) ? payload.data : payload?.data?.contracts;
   if (Number(payload?.code) !== 0 || !Array.isArray(rows)) throw new Error("BingX contract metadata response shape was not recognized");
-  const activeUsdt = rows.filter(x => Number(x.status) === 1 && String(x.currency).toUpperCase() === "USDT");
+  const activeUsdt = rows.filter(x => {
+    if (!String(x.symbol ?? "").endsWith("-USDT") || isExplicitTradFiContract(x) || isBingXTradFiSymbol(x.symbol)) return false;
+    const status = String(x.status ?? "").toUpperCase();
+    return !status || ["TRADING", "ACTIVE", "ONLINE", "1"].includes(status);
+  });
   const spotPayload = await getJson("https://open-api.bingx.com/openApi/spot/v1/common/symbols");
   const spotSymbols = Array.isArray(spotPayload?.data?.symbols) ? spotPayload.data.symbols : [];
   const spotBases = new Set(spotSymbols.filter(x => Number(x.status) === 1).map(x => String(x.symbol).split("-")[0].toUpperCase()));
@@ -143,60 +178,53 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const payload = await getJson("https://api-contract.weex.com/capi/v3/market/exchangeInfo");
   const rows = payload?.symbols;
   if (!Array.isArray(rows)) throw new Error("WEEX exchangeInfo did not return symbols[]");
-  const candidate = rows.filter(x =>
-    x.contractType === "PERPETUAL" &&
-    x.underlyingType === "COIN" &&
-    x.quoteAsset === "USDT" &&
-    x.marginAsset === "USDT" &&
-    x.forwardContractFlag === true
-  );
-  const apiSymbols = await getJson("https://api-contract.weex.com/capi/v3/market/apiTradingSymbols");
-  if (!Array.isArray(apiSymbols)) throw new Error("WEEX apiTradingSymbols response was not an array");
-  const apiEligible = candidate.filter(x => apiSymbols.includes(x.symbol));
-  const notApiEligible = candidate.filter(x => !apiSymbols.includes(x.symbol));
-  const suffixAliases = notApiEligible.filter(x => x.symbol.endsWith("S") && apiSymbols.includes(x.symbol.slice(0, -1)));
-  const nonTradFi = candidate.filter(x => !(Array.isArray(x.underlyingSubType) && x.underlyingSubType.includes("TradFi")));
-  const apiEligibleNonTradFi = apiEligible.filter(x => !(Array.isArray(x.underlyingSubType) && x.underlyingSubType.includes("TradFi")));
-  const knownNonCrypto = rows.filter(x =>
-    x.underlyingType !== "COIN" ||
-    (Array.isArray(x.underlyingSubType) && x.underlyingSubType.includes("TradFi"))
+  const tradfiPayload = await getJson("https://api-contract.weex.com/capi/v3/market/exchangeInfo?contractType=TRADIFI_PERPETUAL");
+  if (!Array.isArray(tradfiPayload?.symbols)) throw new Error("WEEX TradFi catalog response was not an array");
+  const tradfiSymbols = new Set(tradfiPayload.symbols.map(x => String(x.symbol ?? "").toUpperCase()).filter(Boolean));
+  const cryptoCatalogSymbols = new Set(rows.filter(x => {
+    const symbol = String(x.symbol ?? "");
+    const status = String(x.status ?? "").toUpperCase();
+    return x.contractType === "PERPETUAL" &&
+      String(x.underlyingType ?? "").toUpperCase() === "COIN" &&
+      symbol.toUpperCase().endsWith("USDT") &&
+      !tradfiSymbols.has(symbol.toUpperCase()) &&
+      (!status || ["TRADING", "OPEN", "1"].includes(status)) &&
+      String(x.marginAsset ?? x.quoteAsset ?? "USDT").toUpperCase() === "USDT";
+  }).map(x => String(x.symbol).toUpperCase()));
+  const apiTradableSet = new Set(apiSymbols.map(value => {
+    const upper = String(value).toUpperCase();
+    const canonical = upper.replace(/SUSDT$/, "USDT");
+    return cryptoCatalogSymbols.has(canonical) ? canonical : upper;
+  }).filter(Boolean));
+  const candidate = rows.filter(x => cryptoCatalogSymbols.has(String(x.symbol ?? "").toUpperCase()) &&
+    apiTradableSet.has(String(x.symbol ?? "").toUpperCase()));
+  const aliasApiMatches = [...cryptoCatalogSymbols].filter(symbol =>
+    apiTradableSet.has(symbol) && !apiSymbols.some(value => String(value).toUpperCase() === symbol)
   );
   report.venues.WEEX = {
     all: summarize(rows, ["symbol", "contractType", "underlyingType", "underlyingSubType", "quoteAsset", "marginAsset", "forwardContractFlag"]),
-    usdtCryptoPerpetualCandidate: summarize(candidate, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
+    tradfiCatalogCount: tradfiPayload.symbols.length,
     apiTradingSymbolsCount: apiSymbols.length,
-    apiEligibleUsdtCryptoPerpetual: {
-      ...summarize(apiEligible, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
-      symbols: apiEligible.map(x => x.symbol)
-    },
-    apiEligibleNonTradFi: {
-      ...summarize(apiEligibleNonTradFi, ["symbol", "underlyingSubType"]),
-      symbols: apiEligibleNonTradFi.map(x => x.symbol)
-    },
-    nonTradFiCandidate: {
-      ...summarize(nonTradFi, ["symbol", "underlyingSubType"]),
-      symbols: nonTradFi.map(x => x.symbol)
-    },
-    knownNonCryptoByOfficialMetadata: {
-      ...summarize(knownNonCrypto, ["symbol", "underlyingType", "underlyingSubType"]),
-      symbols: knownNonCrypto.map(x => x.symbol)
-    },
-    suffixAliasesNotInApiTradingSymbols: suffixAliases.map(x => ({ symbol: x.symbol, canonical: x.symbol.slice(0, -1) })),
-    nonApiEligibleSymbols: notApiEligible.map(x => x.symbol),
-    symbolsEndingInS: notApiEligible.filter(x => x.symbol.endsWith("S")).map(x => x.symbol)
+    cryptoCatalogCount: cryptoCatalogSymbols.size,
+    aliasApiMatches,
+    verifiedCryptoApiTradable: {
+      ...summarize(candidate, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
+      symbols: candidate.map(x => x.symbol)
+    }
   };
 }
 
 // HTX official linear-swap contract metadata.
 {
-  const payload = await getJson("https://api.hbdm.com/linear-swap-api/v1/swap_contract_info?business_type=swap");
+  const payload = await getJson("https://api.hbdm.com/linear-swap-api/v1/linear_swap_contract_info?business_type=all&trade_partition=CRYPTO");
   const rows = payload?.data;
-  if (payload?.status !== "ok" || !Array.isArray(rows)) throw new Error("HTX swap_contract_info response shape was not recognized");
+  if (payload?.status !== "ok" || !Array.isArray(rows)) throw new Error("HTX official CRYPTO partition response shape was not recognized");
   const candidate = rows.filter(x =>
     Number(x.contract_status) === 1 &&
-    x.business_type === "swap" &&
-    x.contract_type === "swap" &&
-    String(x.trade_partition).toUpperCase() === "USDT"
+    String(x.contract_code ?? "").endsWith("-USDT") &&
+    String(x.settle_currency ?? x.quote_currency ?? "USDT").toUpperCase() === "USDT" &&
+    !hasHtxOfficialTradFiLabel(x) &&
+    !isExplicitTradFiContract(x)
   );
   const spotPayload = await getJson("https://api.huobi.pro/v1/common/symbols");
   const spotRows = Array.isArray(spotPayload?.data) ? spotPayload.data : [];
@@ -283,12 +311,21 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
       String(x.quoteCoin).toUpperCase() === "USDT"
     );
     const platesPayload = await getJson("https://fapi.xt.com/future/market/v1/public/plate/list");
-    const plates = Array.isArray(platesPayload?.result) ? platesPayload.result : platesPayload?.result?.items ?? [];
-    const nonCryptoPlateNames = new Set(["TradFi", "FOREX", "Tokenized Stocks", "Commodities", "Metals", "Indices", "Pre-IPO"]);
-    const nonCryptoPlateIds = new Set(plates.filter(x => nonCryptoPlateNames.has(x.plate)).map(x => Number(x.id)));
-    const cryptoOnly = usdtPerpetual.filter(x =>
-      x.tradeSwitch === true && x.openSwitch === true && x.isOpenApi === true &&
-      !(Array.isArray(x.plates) && x.plates.some(id => nonCryptoPlateIds.has(Number(id))))
+    const plates = Array.isArray(platesPayload?.result) ? platesPayload.result : [];
+    const tradfiPlates = plates.filter(row =>
+      /^(tradfi|forex|tokenized stocks|commodities|index|indices|pre.?market)$/i.test(String(row?.plate ?? row?.name ?? "").trim())
+    ).map(row => Number(row.id)).filter(Number.isFinite);
+    if (!tradfiPlates.length) throw new Error("XT official plate catalog has no recognized TradFi categories");
+    const tradfiIds = new Set(tradfiPlates);
+    const usdtRows = rows.filter(row =>
+      String(row?.symbol ?? "").toLowerCase().endsWith("_usdt") &&
+      row?.tradeSwitch === true &&
+      String(row?.settleCoin ?? row?.quoteCoin ?? "USDT").toUpperCase() === "USDT"
+    );
+    const cryptoOnly = usdtRows.filter(x =>
+      Array.isArray(x.plates) &&
+      !x.plates.some(id => tradfiIds.has(Number(id))) &&
+      !isExplicitTradFiContract(x)
     );
     const nonCryptoUsdtPerpetual = usdtPerpetual.filter(x =>
       Array.isArray(x.plates) && x.plates.some(id => nonCryptoPlateIds.has(Number(id)))
@@ -296,8 +333,13 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     report.venues.XT = {
       all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
       usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
+      officialCryptoOnly: {
+        ...summarize(cryptoOnly, ["symbol", "baseCoin", "symbolGroupId", "plates", "labels"]),
+        symbols: cryptoOnly.map(x => x.symbol),
+        bases: cryptoOnly.map(x => String(x.baseCoin ?? "").toUpperCase())
+      },
       platesMetadata: { ...summarize(plates, ["id", "plate", "symbolSortRule"]), all: plates },
-      nonCryptoPlateIds: [...nonCryptoPlateIds],
+      nonCryptoPlateIds: [...tradfiIds],
       nonCryptoUsdtPerpetual: {
         ...summarize(nonCryptoUsdtPerpetual, ["symbol", "baseCoin", "plates"]),
         symbols: nonCryptoUsdtPerpetual.map(x => x.symbol),
@@ -312,80 +354,16 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   }
 }
 
-const baseFromPair = value => String(value ?? "").toUpperCase()
-  .replace(/[_-]USDTM?$/, "")
-  .replace(/[_-]USDT$/, "")
-  .replace(/USDTM?$/, "")
-  .replace(/[_-]/g, "");
-const knownNonCryptoBases = new Set([
-  ...(report.venues.BingX?.knownNonCryptoByOfficialAssetPrefix?.assets ?? []),
-  ...(report.venues.WEEX?.knownNonCryptoByOfficialMetadata?.symbols ?? []),
-  ...(report.venues.KuCoin?.knownNonCryptoByOfficialMetadata?.bases ?? []),
-  ...(report.venues.XT?.nonCryptoUsdtPerpetual?.bases ?? [])
-].map(baseFromPair).filter(Boolean));
-const referenceBases = new Set([
-  ...(report.venues.MEXC?.activeUsdtPerpetualCandidate?.bases ?? []),
-  ...(report.venues.OKX?.activeUsdtSwapCandidate?.bases ?? []),
-  ...(report.venues.KuCoin?.activeUsdtCryptoCandidate?.bases ?? []),
-  ...(report.venues.XT?.cryptoOnlyCandidate?.bases ?? [])
-].map(baseFromPair).filter(Boolean));
-const geckoRows = await getJson("https://api.coingecko.com/api/v3/coins/list?include_platform=false");
-if (!Array.isArray(geckoRows)) throw new Error("CoinGecko coin list response was not an array");
-const geckoSymbols = new Set(geckoRows.map(x => String(x.symbol ?? "").toUpperCase()).filter(Boolean));
-const htxCandidateCodes = report.venues.HTX?.activeUsdtSwapCandidate?.contractCodes ?? [];
-const htxGeckoMatched = htxCandidateCodes.filter(code => geckoSymbols.has(baseFromPair(code)));
-const htxGeckoMatchedNonTradFi = htxGeckoMatched.filter(code => !knownNonCryptoBases.has(baseFromPair(code)));
-report.coingeckoReference = {
-  coinListCount: geckoRows.length,
-  uniqueSymbols: geckoSymbols.size,
-  HTX: {
-    geckoSymbolMatches: htxGeckoMatched.length,
-    geckoMatchesAfterOfficialTradFiExclusions: htxGeckoMatchedNonTradFi.length,
-    geckoMatchedContractCodes: htxGeckoMatched,
-    geckoMatchedNonTradFiContractCodes: htxGeckoMatchedNonTradFi
-  },
-  MEXC: {
-    geckoSymbolMatches: (report.venues.MEXC?.activeUsdtPerpetualCandidate?.bases ?? []).filter(base => geckoSymbols.has(baseFromPair(base))).length
-  },
-  OKX: {
-    geckoSymbolMatches: (report.venues.OKX?.activeUsdtSwapCandidate?.bases ?? []).filter(base => geckoSymbols.has(baseFromPair(base))).length
-  }
-};
-const htxCodes = report.venues.HTX?.activeUsdtSwapCandidate?.contractCodes ?? [];
-const htxNonCrypto = htxCodes.filter(code => knownNonCryptoBases.has(baseFromPair(code)));
-const htxCryptoCandidate = htxCodes.filter(code => !knownNonCryptoBases.has(baseFromPair(code)));
-const bingxRows = report.venues.BingX?.activeUsdtCandidate?.assets ?? [];
-const bingxCrossExchange = bingxRows.filter(asset =>
-  referenceBases.has(baseFromPair(asset)) &&
-  !knownNonCryptoBases.has(baseFromPair(asset))
-);
-const weexRows = report.venues.WEEX?.nonTradFiCandidate?.symbols ?? [];
-const weexCrossExchange = weexRows.filter(symbol =>
-  referenceBases.has(baseFromPair(symbol)) &&
-  !knownNonCryptoBases.has(baseFromPair(symbol))
-);
-report.crossExchangeCryptoReference = {
-  referenceBaseCount: referenceBases.size,
-  knownNonCryptoBaseCount: knownNonCryptoBases.size,
-  referenceBases: [...referenceBases].sort(),
-  knownNonCryptoBases: [...knownNonCryptoBases].sort(),
-  BingX: { count: bingxCrossExchange.length, assets: bingxCrossExchange },
-  WEEX: { count: weexCrossExchange.length, symbols: weexCrossExchange },
-  HTX: {
-    nonCryptoCount: htxNonCrypto.length,
-    nonCryptoContractCodes: htxNonCrypto,
-    cryptoCandidateCount: htxCryptoCandidate.length,
-    cryptoCandidateContractCodes: htxCryptoCandidate
-  },
-  MEXC: {
-    nonCryptoCount: (report.venues.MEXC?.activeUsdtPerpetualCandidate?.bases ?? []).filter(base => knownNonCryptoBases.has(baseFromPair(base))).length
-  },
-  OKX: {
-    nonCryptoCount: (report.venues.OKX?.activeUsdtSwapCandidate?.bases ?? []).filter(base => knownNonCryptoBases.has(baseFromPair(base))).length
-  }
-};
-
 await writeFile("seven-exchange-universe-audit.json", JSON.stringify(report, null, 2));
+for (const [name, venue] of Object.entries(report.venues)) {
+  const counts = Object.entries(venue).filter(([key, value]) =>
+    key !== "all" && value && typeof value === "object" && Number.isFinite(value.count)
+  ).map(([key, value]) => `${key}=${value.count}`).join(" ");
+  console.log(`UNIVERSE_AUDIT | ${name} | all=${venue.all?.count ?? "unknown"} | ${counts}`);
+}
+console.log("UNIVERSE_AUDIT_FILE | seven-exchange-universe-audit.json");
+
+
 for (const [name, venue] of Object.entries(report.venues)) {
   const countSummary = Object.entries(venue)
     .filter(([key, value]) => key !== "all" && value && typeof value === "object" && Number.isFinite(value.count))
