@@ -230,9 +230,9 @@ async function checkExchange(config) {
     const contracts = Object.values(markets).filter(m =>
       m && m.swap === true && m.active !== false && m.quote === "USDT" && m.settle === "USDT"
     );
-    result.activeUsdtPerpetuals = contracts.length;
+    result.ccxtUsdtSettledSwapMarkets = contracts.length;
     addCheck(result, "Public markets / active USDT-settled perpetuals", contracts.length > 0,
-      `${Object.keys(markets).length} markets loaded; ${contracts.length} active USDT-settled swaps`, true);
+      `${Object.keys(markets).length} markets loaded; ${contracts.length} CCXT USDT-settled swaps before the dedicated crypto-only classification audit`, true);
     const btc = contracts.find(m => m.base === "BTC");
     if (!btc) throw new Error("No active BTC/USDT USDT-settled perpetual in official market metadata");
     result.symbol = btc.symbol;
