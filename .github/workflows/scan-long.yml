@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       exchanges:
-        description: "Exchanges to scan (OKX,MEXC)"
+        description: "Exchanges to scan (MEXC,BingX,OKX,WEEX,HTX,KuCoin,XT)"
         required: true
-        default: "OKX,MEXC"
+        default: "MEXC,BingX,OKX,WEEX,HTX,KuCoin,XT"
       max_symbols:
-        description: "0 = all eligible USDT perpetual contracts; positive = test limit"
+        description: "0 = all eligible USDT perpetual contracts per exchange; positive = test limit per exchange"
         required: true
         default: "0"
       concurrency:
@@ -30,6 +30,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install CCXT adapters
+        run: npm install --no-save --no-package-lock ccxt
       - name: Test indicator and strategy formulas
         run: |
           node --test scripts/test-indicators.mjs
