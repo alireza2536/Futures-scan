@@ -218,13 +218,14 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
 
 // HTX official linear-swap contract metadata.
 {
-  const payload = await getJson("https://api.hbdm.com/linear-swap-api/v1/linear_swap_contract_info?business_type=all&trade_partition=CRYPTO");
+  const payload = await getJson("https://api.hbdm.com/linear-swap-api/v1/swap_contract_info");
   const rows = payload?.data;
-  if (payload?.status !== "ok" || !Array.isArray(rows)) throw new Error("HTX official CRYPTO partition response shape was not recognized");
+  if (payload?.status !== "ok" || !Array.isArray(rows)) throw new Error("HTX swap_contract_info response shape was not recognized");
   const candidate = rows.filter(x =>
     Number(x.contract_status) === 1 &&
     String(x.contract_code ?? "").endsWith("-USDT") &&
     String(x.settle_currency ?? x.quote_currency ?? "USDT").toUpperCase() === "USDT" &&
+    Array.isArray(x.tradfi_labels) &&
     !hasHtxOfficialTradFiLabel(x) &&
     !isExplicitTradFiContract(x)
   );
