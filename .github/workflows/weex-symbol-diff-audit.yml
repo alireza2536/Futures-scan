@@ -1,0 +1,28 @@
+name: WEEX API trading symbol catalog diff audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/audits/weex-symbol-diff-audit.mjs"
+      - ".github/workflows/weex-symbol-diff-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve every API-trading symbol missing from both contract catalogs
+        run: node .github/audits/weex-symbol-diff-audit.mjs
+      - name: Upload WEEX catalog diff report
+        if: always() && hashFiles('weex-symbol-diff-audit.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: weex-symbol-diff-audit
+          path: weex-symbol-diff-audit.json
+          retention-days: 14
