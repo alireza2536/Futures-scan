@@ -12,6 +12,12 @@ async function getJson(url){
  }
  throw last??new Error("request failed");
 }
+function isExplicitTradFiContract(row){
+ const fields=[row?.assetClass,row?.asset_class,row?.assetType,row?.asset_type,row?.baseAssetType,row?.baseAssetSubType,row?.base_asset_type,row?.base_asset_sub_type,row?.marketType,row?.market_type,row?.businessType,row?.business_type,row?.productType,row?.product_type,row?.category,row?.symbolType,row?.symbol_type,row?.instrumentType,row?.instrument_type,row?.underlyingType,row?.underlying_type];
+ const normalized=fields.filter(v=>v!==null&&v!==undefined&&String(v).trim()!=="").map(v=>String(v).trim().toLowerCase().replace(/[\\s_-]+/g,""));
+ const names=[row?.baseCoinName,row?.baseCoinNameEn,row?.enName,row?.enDesc,row?.cnName,row?.cnDesc,row?.displayName,row?.description].filter(v=>v!==null&&v!==undefined&&String(v).trim()!=="").map(v=>String(v).trim().toLowerCase());
+ return normalized.some(v=>/^(tradfi|traditionalfinance|stock|stocks|equity|equities|forex|fx|commodity|commodities|index|indices|metal|metals|energy)$/.test(v))||names.some(v=>/(stock|equity|share|forex|commodity|commodities|indices|index|metal|metals|gold|silver|crude|oil|natural gas|sp500|s&p|nasdaq|dow jones|nikkei|jp225|us30)/i.test(v));
+}
 const results={};
 {
  const [contracts,tickers]=await Promise.all([
@@ -21,9 +27,11 @@ const results={};
  if(contracts.success!==true||!Array.isArray(contracts.data)||tickers.success!==true)throw new Error("MEXC contract/ticker schema invalid");
  const tickerRows=Array.isArray(tickers.data)?tickers.data:tickers.data?[tickers.data]:[];
  const bySymbol=new Map(tickerRows.map(x=>[x.symbol,x]));
- const active=contracts.data.filter(x=>Number(x.state)===0&&x.settleCoin==="USDT"&&Number(x.typeLabel)===0&&String(x.symbol??"").endsWith("_USDT"));
+ const rawActive=contracts.data.filter(x=>Number(x.state)===0&&x.settleCoin==="USDT"&&Number(x.typeLabel)===0&&String(x.symbol??"").endsWith("_USDT"));
+ const excludedByMetadata=rawActive.filter(isExplicitTradFiContract);
+ const active=rawActive.filter(x=>!isExplicitTradFiContract(x));
  const missing=active.filter(x=>{const v=Number(bySymbol.get(x.symbol)?.holdVol);return !Number.isFinite(v)||v<=0;}).map(x=>x.symbol);
- results.MEXC={contractRows:contracts.data.length,tickerRows:tickerRows.length,activeCryptoUsdtPerpetuals:active.length,oiPassed:active.length-missing.length,oiFailed:missing.length,failedSymbols:missing};
+ results.MEXC={contractRows:contracts.data.length,tickerRows:tickerRows.length,rawActiveUsdtTypeLabelZero:rawActive.length,excludedByMetadata:excludedByMetadata.length,excludedExamples:excludedByMetadata.map(x=>({symbol:x.symbol,baseCoinName:x.baseCoinName,baseCoinNameEn:x.baseCoinNameEn,enName:x.enName,assetType:x.assetType,category:x.category})),activeCryptoUsdtPerpetuals:active.length,oiPassed:active.length-missing.length,oiFailed:missing.length,failedSymbols:missing};
 }
 {
  const [instruments,oi]=await Promise.all([
