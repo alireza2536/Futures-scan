@@ -107,6 +107,58 @@ const MEXC_INTERVALS = {
   "1d": { api: "Day1", seconds: 24 * 60 * 60 }
 };
 
+const BINGX_INTERVAL_MS = { "15m": 900000, "1h": 3600000, "2h": 7200000, "4h": 14400000, "1d": 86400000 };
+
+export async function fetchBingXHistory({
+  symbol = "BTC-USDT", marketId = null, interval = "4h", count = 1202,
+  base = "https://open-api.bingx.com"
+} = {}) {
+  const duration = BINGX_INTERVAL_MS[interval];
+  if (!duration) throw new Error(`Unsupported BingX interval: ${interval}`);
+  if (!Number.isInteger(count) || count < 2) throw new Error("count must be an integer >= 2");
+  const contractSymbol = marketId || symbol;
+  const target = count + 8;
+  const byTime = new Map();
+  const now = Date.now();
+  let endTime = now;
+  let pages = 0;
+  const maxPages = Math.ceil(target / 1400) + 3;
+  while (byTime.size < target && pages < maxPages) {
+    const limit = Math.min(1440, Math.max(100, target - byTime.size + 8));
+    const startTime = Math.max(0, endTime - (limit + 2) * duration);
+    const params = new URLSearchParams({
+      symbol: contractSymbol, interval, startTime: String(Math.trunc(startTime)),
+      endTime: String(Math.trunc(endTime)), limit: String(limit)
+    });
+    const payload = await requestJson(`${base}/openApi/swap/v3/quote/klines?${params}`);
+    if (Number(payload?.code) !== 0 || !Array.isArray(payload?.data)) {
+      throw new Error(`BingX ${interval} kline rejected for ${contractSymbol}: ${payload?.msg ?? payload?.code ?? "invalid response"}`);
+    }
+    const before = byTime.size;
+    for (const row of payload.data) {
+      if (!Array.isArray(row) || row.length < 6) continue;
+      const bar = {
+        timestamp: Number(row[0]), open: Number(row[1]), high: Number(row[2]),
+        low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), confirmed: null
+      };
+      const closeTime = Number(row[6] ?? (bar.timestamp + duration - 1));
+      if (closeTime >= now || bar.timestamp + duration > now || !validBar(bar)) continue;
+      byTime.set(bar.timestamp, bar);
+    }
+    pages += 1;
+    if (byTime.size === before) break;
+    const oldest = Math.min(...byTime.keys());
+    if (!Number.isFinite(oldest) || oldest <= 0) break;
+    endTime = oldest - 1;
+    if (byTime.size < target) await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  const bars = dedupeAndSort([...byTime.values()]);
+  if (bars.length < count) {
+    throw new Error(`BingX returned only ${bars.length}/${count} closed valid ${interval} candles for ${contractSymbol} after ${pages} pages`);
+  }
+  return bars.slice(-count);
+}
+
 export async function fetchMexcHistory({
   base = "https://api.mexc.com",
   symbol = "BTC_USDT",
