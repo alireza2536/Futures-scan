@@ -107,18 +107,27 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
 // grounded follow-up filter; do not infer crypto status from symbol spelling.
 {
   const payload = await getJson("https://fapi.xt.com/future/market/v3/public/symbol/list");
-  const rows = payload?.result;
-  if (Number(payload?.returnCode) !== 0 || !Array.isArray(rows)) throw new Error("XT symbol list response shape was not recognized");
-  const usdtPerpetual = rows.filter(x =>
-    x.contractType === "PERPETUAL" &&
-    x.productType === "perpetual" &&
-    x.quoteCoin === "USDT" &&
-    String(x.underlyingType).toUpperCase().includes("USDT")
-  );
-  report.venues.XT = {
-    all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "isOpenApi", "isDisplay", "labels", "plates"]),
-    usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "isOpenApi", "isDisplay", "labels", "plates"])
-  };
+  const rows = Array.isArray(payload?.result) ? payload.result
+    : Array.isArray(payload?.data) ? payload.data
+    : Array.isArray(payload?.result?.list) ? payload.result.list
+    : null;
+  if (!rows) {
+    report.venues.XT = {
+      error: "XT symbol list response shape was not recognized",
+      responseKeys: Object.keys(payload ?? {}),
+      responsePreview: JSON.stringify(payload).slice(0, 5000)
+    };
+  } else {
+    const usdtPerpetual = rows.filter(x =>
+      x.contractType === "PERPETUAL" &&
+      x.productType === "perpetual" &&
+      x.quoteCoin === "USDT"
+    );
+    report.venues.XT = {
+      all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "isOpenApi", "isDisplay", "labels", "plates"]),
+      usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "isOpenApi", "isDisplay", "labels", "plates"])
+    };
+  }
 }
 
 await writeFile("seven-exchange-universe-audit.json", JSON.stringify(report, null, 2));
