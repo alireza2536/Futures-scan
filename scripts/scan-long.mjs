@@ -2,6 +2,7 @@ import ccxt from "ccxt";
 import { writeFile } from "node:fs/promises";
 import { fetchOkxHistory, fetchMexcHistory, fetchCcxtHistory, fetchWeexHistory, fetchHtxHistory } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
+import { loadExchangeUniverse } from "./symbol-universe.mjs";
 import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
 
 const CANDLE_COUNT = 1202;
@@ -15,43 +16,9 @@ const CONFIG = {
   WEEX:{id:"weex"}, HTX:{id:"htx"}, KUCOIN:{id:"kucoinfutures"}, XT:{id:"xt"}
 };
 
-async function getJson(url) {
-  let last;
-  for (let i=0;i<5;i++) {
-    const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),20000);
-    try {
-      const response=await fetch(url,{headers:{accept:"application/json","user-agent":"Futures-scan/0.4"},signal:controller.signal});
-      const body=await response.json();
-      if(response.status===429){if(i===4) throw new Error("HTTP 429 rate limit"); await new Promise(r=>setTimeout(r,1000*(i+1))); continue;}
-      if(!response.ok) throw new Error("HTTP "+response.status+": "+JSON.stringify(body).slice(0,180));
-      return body;
-    } catch(e){last=e;if(i===4) break;await new Promise(r=>setTimeout(r,500*(i+1)));}
-    finally{clearTimeout(timer);}
-  }
-  throw last ?? new Error("Request failed");
-}
-async function getOkxSymbols() {
-  let last;
-  for(const base of ["https://eea.okx.com","https://openapi.okx.com"]) try {
-    const p=await getJson(base+"/api/v5/public/instruments?instType=SWAP");
-    if(p.code!=="0"||!Array.isArray(p.data)) throw new Error("OKX instrument list rejected: "+(p.msg??p.code));
-    return p.data.filter(x=>x.state==="live"&&x.settleCcy==="USDT").map(x=>({exchange:"OKX",symbol:x.instId,display:x.instId,base:x.ctValCcy,apiBase:base}));
-  } catch(e){last=e;}
-  throw last ?? new Error("OKX instrument list unavailable");
-}
-async function getMexcSymbols() {
-  const p=await getJson("https://api.mexc.com/api/v1/contract/detail");
-  if(p.success!==true||!Array.isArray(p.data)) throw new Error("MEXC contract list rejected: "+(p.message??p.code));
-  return p.data.filter(x=>x.quoteCoin==="USDT"&&x.state===0&&x.symbol?.endsWith("_USDT")).map(x=>({exchange:"MEXC",symbol:x.symbol,display:x.symbol,base:x.baseCoin}));
-}
 function createClient(config) {
   if(!ccxt.exchanges.includes(config.id)) throw new Error("CCXT adapter missing: "+config.id);
   return new ccxt[config.id]({enableRateLimit:true,timeout:30000,options:{defaultType:"swap"}});
-}
-async function getCcxtSymbols(label,client) {
-  const markets=await client.loadMarkets();
-  return Object.values(markets).filter(m=>m&&m.active!==false&&m.contract===true&&m.swap===true&&m.quote==="USDT"&&m.settle==="USDT"&&m.symbol&&m.base)
-    .map(m=>({exchange:label,symbol:m.symbol,display:m.symbol,base:m.base,marketId:m.id}));
 }
 function matchesFilter(item) {
   if(!SYMBOL_FILTER.length) return true;
@@ -87,9 +54,10 @@ if(new Set(EXCHANGES).size!==EXCHANGES.length) throw new Error("Duplicate exchan
 const clients=new Map();
 try {
   const lists=await Promise.all(EXCHANGES.map(async label=>{
-    const cfg=CONFIG[label];
-    if(cfg.direct) return label==="OKX"?getOkxSymbols():getMexcSymbols();
-    const client=createClient(cfg);clients.set(label,client);return getCcxtSymbols(label,client);
+    const needsCcxt=["BINGX","KUCOIN","XT"].includes(label);
+    const client=needsCcxt?createClient(CONFIG[label]):null;
+    if(client) clients.set(label,client);
+    return loadExchangeUniverse(label,client);
   }));
   const filtered=lists.map(list=>list.filter(matchesFilter));
   const universe=filtered.flatMap(list=>MAX_SYMBOLS>0?list.slice(0,MAX_SYMBOLS):list);
