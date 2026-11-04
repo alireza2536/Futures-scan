@@ -58,7 +58,8 @@ const eligibleNotInApiTrading=symbols.filter(s=>!tradableSet.has(s.toUpperCase()
 const tradableNotEligible=[...tradableSet].filter(s=>!eligibleSet.has(s));
 const tradableTradfiOverlap=tradableNotEligible.filter(s=>tradfiSet.has(s));
 const tradableUnclassified=tradableNotEligible.filter(s=>!tradfiSet.has(s));
-const unclassifiedRows=catalog.symbols.filter(row=>tradableUnclassified.includes(String(row?.symbol??"").toUpperCase())).map(row=>({
+const unclassifiedSet=new Set(tradableUnclassified);
+const unclassifiedRows=catalog.symbols.filter(row=>unclassifiedSet.has(String(row?.symbol??"").toUpperCase())).map(row=>({
  symbol:row.symbol,contractType:row.contractType,underlyingType:row.underlyingType,
  underlyingSubType:row.underlyingSubType,marginAsset:row.marginAsset,quoteAsset:row.quoteAsset,
  forwardContractFlag:row.forwardContractFlag,tradfi:tradfiSet.has(String(row.symbol??"").toUpperCase())
