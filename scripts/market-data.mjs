@@ -122,6 +122,7 @@ export async function fetchBingXHistory({
   const now = Date.now();
   let endTime = now;
   let pages = 0;
+  let lastPageInfo = null;
   const maxPages = Math.ceil(target / 1400) + 3;
   while (byTime.size < target && pages < maxPages) {
     const limit = Math.min(1000, Math.max(100, target - byTime.size + 8));
@@ -132,7 +133,9 @@ export async function fetchBingXHistory({
       paramsObject.endTime = String(Math.trunc(endTime));
     }
     const params = new URLSearchParams(paramsObject);
-    const payload = await requestJson(`${base}/openApi/swap/v3/quote/klines?${params}`);
+    const requestUrl = `${base}/openApi/swap/v3/quote/klines?${params}`;
+    const payload = await requestJson(requestUrl);
+    lastPageInfo = { url: requestUrl, code: payload?.code, message: payload?.msg, dataLength: Array.isArray(payload?.data) ? payload.data.length : null, sample: Array.isArray(payload?.data) ? payload.data[0] ?? null : payload?.data };
     if (Number(payload?.code) !== 0 || !Array.isArray(payload?.data)) {
       throw new Error(`BingX ${interval} kline rejected for ${contractSymbol}: ${payload?.msg ?? payload?.code ?? "invalid response"}`);
     }
@@ -156,7 +159,7 @@ export async function fetchBingXHistory({
   }
   const bars = dedupeAndSort([...byTime.values()]);
   if (bars.length < count) {
-    throw new Error(`BingX returned only ${bars.length}/${count} closed valid ${interval} candles for ${contractSymbol} after ${pages} pages`);
+    throw new Error(`BingX returned only ${bars.length}/${count} closed valid ${interval} candles for ${contractSymbol} after ${pages} pages; lastPage=${JSON.stringify(lastPageInfo).slice(0, 700)}`);
   }
   return bars.slice(-count);
 }
