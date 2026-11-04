@@ -104,6 +104,7 @@ try {
   const summary={generatedAt:new Date().toISOString(),rule:"4h close > EMA500 AND CCI(1200) > 100",exchanges:EXCHANGES,scanned:results.length,longMatches:matches.length,dataErrors:errors.length,matches,errors};
   await writeFile("scan-results.json",JSON.stringify(summary,null,2));
   console.log("SUMMARY | scanned="+results.length+" | LONG="+matches.length+" | DATA_ERROR="+errors.length);
+  for (const error of errors) console.log("DATA_ERROR_DETAIL | "+error.exchange+" | "+error.symbol+" | "+error.error);
   console.log("RESULT_FILE | scan-results.json");
   if(REQUIRE_DATA&&errors.length) process.exitCode=1;
 } finally {
