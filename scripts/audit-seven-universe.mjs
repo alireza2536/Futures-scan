@@ -49,12 +49,22 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     String(x.settleCoin).toUpperCase() === "USDT" &&
     (x.futureType == null || Number(x.futureType) === 1)
   );
+  const spotPayload = await getJson("https://api.mexc.com/api/v3/exchangeInfo");
+  const spotRows = Array.isArray(spotPayload?.symbols) ? spotPayload.symbols : [];
+  const spotBases = new Set(spotRows.filter(x => x.status === "1" || x.status === 1).map(x => String(x.baseAsset ?? "").toUpperCase()));
+  const spotBacked = candidate.filter(x => spotBases.has(String(x.baseCoin ?? x.symbol?.split("_")[0] ?? "").toUpperCase()));
   report.venues.MEXC = {
     all: summarize(rows, ["symbol", "state", "quoteCoin", "settleCoin", "futureType"]),
     activeUsdtPerpetualCandidate: {
       ...summarize(candidate, ["symbol", "state", "quoteCoin", "settleCoin", "futureType"]),
       symbols: candidate.map(x => x.symbol),
       bases: candidate.map(x => String(x.baseCoin ?? x.symbol?.split("_")[0] ?? "").toUpperCase())
+    },
+    spotSymbolCount: spotRows.length,
+    activeUsdtPerpetualsBackedBySpotBase: {
+      ...summarize(spotBacked, ["symbol", "baseCoin"]),
+      symbols: spotBacked.map(x => x.symbol),
+      bases: spotBacked.map(x => String(x.baseCoin ?? x.symbol?.split("_")[0] ?? "").toUpperCase())
     }
   };
 }
@@ -68,12 +78,21 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     x.state === "live" &&
     String(x.settleCcy).toUpperCase() === "USDT"
   );
+  const spotPayload = await getJson("https://www.okx.com/api/v5/public/instruments?instType=SPOT");
+  const spotRows = Array.isArray(spotPayload?.data) ? spotPayload.data : [];
+  const spotBases = new Set(spotRows.filter(x => x.state === "live").map(x => String(x.baseCcy ?? "").toUpperCase()));
+  const spotBacked = candidate.filter(x => spotBases.has(String(x.instId).split("-")[0].toUpperCase()));
   report.venues.OKX = {
     all: summarize(rows, ["instId", "state", "settleCcy", "ctType"]),
     activeUsdtSwapCandidate: {
       ...summarize(candidate, ["instId", "state", "settleCcy", "ctType"]),
       symbols: candidate.map(x => x.instId),
       bases: candidate.map(x => String(x.instId).split("-")[0].toUpperCase())
+    },
+    spotSymbolCount: spotRows.length,
+    activeUsdtSwapsBackedBySpotBase: {
+      ...summarize(spotBacked, ["instId", "settleCcy"]),
+      symbols: spotBacked.map(x => x.instId)
     }
   };
 }
@@ -162,7 +181,9 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
       ...summarize(knownNonCrypto, ["symbol", "underlyingType", "underlyingSubType"]),
       symbols: knownNonCrypto.map(x => x.symbol)
     },
-    suffixAliasesNotInApiTradingSymbols: suffixAliases.map(x => ({ symbol: x.symbol, canonical: x.symbol.slice(0, -1) }))
+    suffixAliasesNotInApiTradingSymbols: suffixAliases.map(x => ({ symbol: x.symbol, canonical: x.symbol.slice(0, -1) })),
+    nonApiEligibleSymbols: notApiEligible.map(x => x.symbol),
+    symbolsEndingInS: notApiEligible.filter(x => x.symbol.endsWith("S")).map(x => x.symbol)
   };
 }
 
@@ -202,6 +223,9 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
       contractCodes: spotBacked.map(x => x.contract_code)
     },
     currencyListCount: currencyRows.length,
+    currencyRowKeys: [...new Set(currencyRows.flatMap(x => Object.keys(typeof x === "object" ? x : {})))].sort(),
+    currencyRowsSample: currencyRows.slice(0, 12),
+    spotRowsSample: spotRows.slice(0, 8),
     activeUsdtSwapsBackedByCurrencyList: {
       ...summarize(currencyBacked, ["contract_code", "symbol"]),
       contractCodes: currencyBacked.map(x => x.contract_code)
@@ -272,7 +296,7 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     report.venues.XT = {
       all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
       usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
-      platesMetadata: summarize(plates, ["id", "plate", "symbolSortRule"]),
+      platesMetadata: { ...summarize(plates, ["id", "plate", "symbolSortRule"]), all: plates },
       nonCryptoPlateIds: [...nonCryptoPlateIds],
       nonCryptoUsdtPerpetual: {
         ...summarize(nonCryptoUsdtPerpetual, ["symbol", "baseCoin", "plates"]),
