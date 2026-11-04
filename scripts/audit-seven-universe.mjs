@@ -370,5 +370,5 @@ for (const [name, venue] of Object.entries(report.venues)) {
     .map(([key, value]) => `${key}=${value.count}`).join(" ");
   console.log(`UNIVERSE_AUDIT | ${name} | all=${venue.all?.count ?? "unknown"} | ${countSummary}`);
 }
-console.log(`CROSS_EXCHANGE_CRYPTO | refs=${referenceBases.size} | BingX=${bingxCrossExchange.length} | WEEX=${weexCrossExchange.length} | HTX=${htxCrossExchange.length}`);
+console.log(`CROSS_EXCHANGE_CRYPTO | refs=${referenceBases.size} | BingX=${bingxCrossExchange.length} | WEEX=${weexCrossExchange.length} | HTX_crypto_candidate=${htxCryptoCandidate.length} | HTX_known_noncrypto=${htxNonCrypto.length}`);
 console.log("UNIVERSE_AUDIT_FILE | seven-exchange-universe-audit.json");
