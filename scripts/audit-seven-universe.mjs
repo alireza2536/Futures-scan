@@ -38,6 +38,46 @@ const summarize = (rows, fields) => ({
 
 const report = { generatedAt: new Date().toISOString(), venues: {} };
 
+// MEXC official active USDT-margined perpetual contracts.
+{
+  const payload = await getJson("https://contract.mexc.com/api/v1/contract/detail");
+  const rows = payload?.data;
+  if (payload?.success !== true || !Array.isArray(rows)) throw new Error("MEXC contract detail response shape was not recognized");
+  const candidate = rows.filter(x =>
+    Number(x.state) === 0 &&
+    String(x.quoteCoin).toUpperCase() === "USDT" &&
+    String(x.settleCoin).toUpperCase() === "USDT" &&
+    (x.futureType == null || Number(x.futureType) === 1)
+  );
+  report.venues.MEXC = {
+    all: summarize(rows, ["symbol", "state", "quoteCoin", "settleCoin", "futureType"]),
+    activeUsdtPerpetualCandidate: {
+      ...summarize(candidate, ["symbol", "state", "quoteCoin", "settleCoin", "futureType"]),
+      symbols: candidate.map(x => x.symbol),
+      bases: candidate.map(x => String(x.baseCoin ?? x.symbol?.split("_")[0] ?? "").toUpperCase())
+    }
+  };
+}
+
+// OKX official active USDT-settled perpetual swaps.
+{
+  const payload = await getJson("https://www.okx.com/api/v5/public/instruments?instType=SWAP");
+  const rows = payload?.data;
+  if (String(payload?.code) !== "0" || !Array.isArray(rows)) throw new Error("OKX instruments response shape was not recognized");
+  const candidate = rows.filter(x =>
+    x.state === "live" &&
+    String(x.settleCcy).toUpperCase() === "USDT"
+  );
+  report.venues.OKX = {
+    all: summarize(rows, ["instId", "state", "settleCcy", "ctType"]),
+    activeUsdtSwapCandidate: {
+      ...summarize(candidate, ["instId", "state", "settleCcy", "ctType"]),
+      symbols: candidate.map(x => x.instId),
+      bases: candidate.map(x => String(x.instId).split("-")[0].toUpperCase())
+    }
+  };
+}
+
 // BingX official perpetual contract metadata.
 {
   const payload = await getJson("https://open-api.bingx.com/openApi/swap/v2/quote/contracts");
@@ -48,6 +88,9 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const spotSymbols = Array.isArray(spotPayload?.data?.symbols) ? spotPayload.data.symbols : [];
   const spotBases = new Set(spotSymbols.filter(x => Number(x.status) === 1).map(x => String(x.symbol).split("-")[0].toUpperCase()));
   const spotBacked = activeUsdt.filter(x => spotBases.has(String(x.asset).toUpperCase()));
+  const cryptoPrefixCandidate = activeUsdt.filter(x =>
+    !["NCCO", "NCFX", "NCS"].some(prefix => String(x.asset).toUpperCase().startsWith(prefix))
+  );
   report.venues.BingX = {
     all: summarize(rows, ["symbol", "status", "currency", "asset", "contractId"]),
     activeUsdtCandidate: {
@@ -59,6 +102,11 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     activeUsdtContractsBackedBySpotBase: {
       ...summarize(spotBacked, ["symbol", "status", "currency", "asset"]),
       symbols: spotBacked.map(x => x.symbol)
+    },
+    nonCryptoAssetPrefixFilteredCandidate: {
+      ...summarize(cryptoPrefixCandidate, ["symbol", "asset"]),
+      symbols: cryptoPrefixCandidate.map(x => x.symbol),
+      assets: cryptoPrefixCandidate.map(x => x.asset)
     }
   };
 }
@@ -80,6 +128,8 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const apiEligible = candidate.filter(x => apiSymbols.includes(x.symbol));
   const notApiEligible = candidate.filter(x => !apiSymbols.includes(x.symbol));
   const suffixAliases = notApiEligible.filter(x => x.symbol.endsWith("S") && apiSymbols.includes(x.symbol.slice(0, -1)));
+  const nonTradFi = candidate.filter(x => !(Array.isArray(x.underlyingSubType) && x.underlyingSubType.includes("TradFi")));
+  const apiEligibleNonTradFi = apiEligible.filter(x => !(Array.isArray(x.underlyingSubType) && x.underlyingSubType.includes("TradFi")));
   report.venues.WEEX = {
     all: summarize(rows, ["symbol", "contractType", "underlyingType", "underlyingSubType", "quoteAsset", "marginAsset", "forwardContractFlag"]),
     usdtCryptoPerpetualCandidate: summarize(candidate, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
@@ -87,6 +137,14 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     apiEligibleUsdtCryptoPerpetual: {
       ...summarize(apiEligible, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
       symbols: apiEligible.map(x => x.symbol)
+    },
+    apiEligibleNonTradFi: {
+      ...summarize(apiEligibleNonTradFi, ["symbol", "underlyingSubType"]),
+      symbols: apiEligibleNonTradFi.map(x => x.symbol)
+    },
+    nonTradFiCandidate: {
+      ...summarize(nonTradFi, ["symbol", "underlyingSubType"]),
+      symbols: nonTradFi.map(x => x.symbol)
     },
     suffixAliasesNotInApiTradingSymbols: suffixAliases.map(x => ({ symbol: x.symbol, canonical: x.symbol.slice(0, -1) }))
   };
@@ -149,7 +207,11 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   );
   report.venues.KuCoin = {
     all: summarize(rows, ["symbol", "status", "quoteCurrency", "settleCurrency", "marketType", "assetClass"]),
-    activeUsdtCryptoCandidate: summarize(candidate, ["symbol", "status", "quoteCurrency", "settleCurrency", "marketType", "assetClass"])
+    activeUsdtCryptoCandidate: {
+      ...summarize(candidate, ["symbol", "status", "quoteCurrency", "settleCurrency", "marketType", "assetClass"]),
+      symbols: candidate.map(x => x.symbol),
+      bases: candidate.map(x => String(x.baseCurrency ?? x.base ?? "").toUpperCase())
+    }
   };
 }
 
@@ -176,11 +238,22 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     );
     const platesPayload = await getJson("https://fapi.xt.com/future/market/v1/public/plate/list");
     const plates = Array.isArray(platesPayload?.result) ? platesPayload.result : platesPayload?.result?.items ?? [];
+    const nonCryptoPlateNames = new Set(["TradFi", "FOREX", "Tokenized Stocks", "Commodities", "Metals", "Indices", "Pre-IPO"]);
+    const nonCryptoPlateIds = new Set(plates.filter(x => nonCryptoPlateNames.has(x.plate)).map(x => Number(x.id)));
+    const cryptoOnly = usdtPerpetual.filter(x =>
+      x.tradeSwitch === true && x.openSwitch === true && x.isOpenApi === true &&
+      !(Array.isArray(x.plates) && x.plates.some(id => nonCryptoPlateIds.has(Number(id))))
+    );
     report.venues.XT = {
       all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
       usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
-      platesMetadata: summarize(plates, ["id", "plateId", "name", "enName", "type", "category", "plateType"]),
-      usdtPerpetualSymbols: usdtPerpetual.map(x => ({ symbol: x.symbol, baseCoin: x.baseCoin, symbolGroupId: x.symbolGroupId, plates: x.plates, labels: x.labels }))
+      platesMetadata: summarize(plates, ["id", "plate", "symbolSortRule"]),
+      nonCryptoPlateIds: [...nonCryptoPlateIds],
+      cryptoOnlyCandidate: {
+        ...summarize(cryptoOnly, ["symbol", "baseCoin", "symbolGroupId", "plates", "labels"]),
+        symbols: cryptoOnly.map(x => x.symbol),
+        bases: cryptoOnly.map(x => String(x.baseCoin ?? "").toUpperCase())
+      }
     };
   }
 }
