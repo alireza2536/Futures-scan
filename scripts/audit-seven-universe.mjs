@@ -46,7 +46,11 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const activeUsdt = rows.filter(x => Number(x.status) === 1 && String(x.currency).toUpperCase() === "USDT");
   report.venues.BingX = {
     all: summarize(rows, ["symbol", "status", "currency", "asset", "contractId"]),
-    activeUsdtCandidate: summarize(activeUsdt, ["symbol", "status", "currency", "asset"])
+    activeUsdtCandidate: {
+      ...summarize(activeUsdt, ["symbol", "status", "currency", "asset"]),
+      symbols: activeUsdt.map(x => x.symbol),
+      assets: activeUsdt.map(x => x.asset)
+    }
   };
 }
 
@@ -62,9 +66,17 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     x.marginAsset === "USDT" &&
     x.forwardContractFlag === true
   );
+  const apiSymbols = await getJson("https://api-contract.weex.com/capi/v3/market/apiTradingSymbols");
+  if (!Array.isArray(apiSymbols)) throw new Error("WEEX apiTradingSymbols response was not an array");
+  const apiEligible = candidate.filter(x => apiSymbols.includes(x.symbol));
   report.venues.WEEX = {
     all: summarize(rows, ["symbol", "contractType", "underlyingType", "underlyingSubType", "quoteAsset", "marginAsset", "forwardContractFlag"]),
-    usdtCryptoPerpetualCandidate: summarize(candidate, ["symbol", "contractType", "underlyingType", "underlyingSubType"])
+    usdtCryptoPerpetualCandidate: summarize(candidate, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
+    apiTradingSymbolsCount: apiSymbols.length,
+    apiEligibleUsdtCryptoPerpetual: {
+      ...summarize(apiEligible, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
+      symbols: apiEligible.map(x => x.symbol)
+    }
   };
 }
 
@@ -79,9 +91,22 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     x.contract_type === "swap" &&
     String(x.trade_partition).toUpperCase() === "USDT"
   );
+  const spotPayload = await getJson("https://api.huobi.pro/v1/common/symbols");
+  const spotRows = Array.isArray(spotPayload?.data) ? spotPayload.data : [];
+  const spotBases = new Set(spotRows.filter(x => x.state === "online").map(x => String(x["base-currency"] ?? "").toUpperCase()));
+  const spotBacked = candidate.filter(x => spotBases.has(String(x.symbol ?? "").toUpperCase()));
   report.venues.HTX = {
     all: summarize(rows, ["contract_code", "symbol", "contract_status", "business_type", "contract_type", "trade_partition"]),
-    activeUsdtSwapCandidate: summarize(candidate, ["contract_code", "symbol", "contract_status", "business_type", "contract_type", "trade_partition"])
+    activeUsdtSwapCandidate: {
+      ...summarize(candidate, ["contract_code", "symbol", "contract_status", "business_type", "contract_type", "trade_partition"]),
+      contractCodes: candidate.map(x => x.contract_code),
+      symbols: candidate.map(x => x.symbol)
+    },
+    spotSymbolCount: spotRows.length,
+    activeUsdtSwapsBackedBySpotBase: {
+      ...summarize(spotBacked, ["contract_code", "symbol"]),
+      contractCodes: spotBacked.map(x => x.contract_code)
+    }
   };
 }
 
@@ -107,7 +132,8 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
 // grounded follow-up filter; do not infer crypto status from symbol spelling.
 {
   const payload = await getJson("https://fapi.xt.com/future/market/v3/public/symbol/list");
-  const rows = Array.isArray(payload?.result) ? payload.result
+  const rows = Array.isArray(payload?.result?.symbols) ? payload.result.symbols
+    : Array.isArray(payload?.result) ? payload.result
     : Array.isArray(payload?.data) ? payload.data
     : Array.isArray(payload?.result?.list) ? payload.result.list
     : null;
@@ -121,11 +147,11 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     const usdtPerpetual = rows.filter(x =>
       x.contractType === "PERPETUAL" &&
       x.productType === "perpetual" &&
-      x.quoteCoin === "USDT"
+      String(x.quoteCoin).toUpperCase() === "USDT"
     );
     report.venues.XT = {
-      all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "isOpenApi", "isDisplay", "labels", "plates"]),
-      usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "isOpenApi", "isDisplay", "labels", "plates"])
+      all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
+      usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"])
     };
   }
 }
