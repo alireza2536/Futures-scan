@@ -179,7 +179,9 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const rows = payload?.symbols;
   if (!Array.isArray(rows)) throw new Error("WEEX exchangeInfo did not return symbols[]");
   const tradfiPayload = await getJson("https://api-contract.weex.com/capi/v3/market/exchangeInfo?contractType=TRADIFI_PERPETUAL");
+  const apiSymbols = await getJson("https://api-contract.weex.com/capi/v3/market/apiTradingSymbols");
   if (!Array.isArray(tradfiPayload?.symbols)) throw new Error("WEEX TradFi catalog response was not an array");
+  if (!Array.isArray(apiSymbols)) throw new Error("WEEX apiTradingSymbols response was not an array");
   const tradfiSymbols = new Set(tradfiPayload.symbols.map(x => String(x.symbol ?? "").toUpperCase()).filter(Boolean));
   const cryptoCatalogSymbols = new Set(rows.filter(x => {
     const symbol = String(x.symbol ?? "");
