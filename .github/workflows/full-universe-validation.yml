@@ -1,11 +1,6 @@
 name: Full seven-exchange universe validation
 
 on:
-  push:
-    branches:
-      - feature/seven-exchange-scanner-adapters
-    paths:
-      - .github/workflows/full-universe-validation.yml
   workflow_dispatch:
 
 permissions:
