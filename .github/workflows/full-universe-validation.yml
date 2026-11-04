@@ -1,0 +1,45 @@
+name: Full seven-exchange universe validation
+
+on:
+  push:
+    branches:
+      - feature/seven-exchange-scanner-adapters
+    paths:
+      - .github/workflows/full-universe-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-universe-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install CCXT adapters
+        run: npm install --no-save --no-package-lock ccxt
+      - name: Verify indicator and strategy tests
+        run: |
+          node --test scripts/test-indicators.mjs
+          node --test scripts/test-strategy.mjs
+      - name: Scan every eligible USDT crypto perpetual
+        env:
+          EXCHANGES: MEXC,BINGX,OKX,WEEX,HTX,KUCOIN,XT
+          MAX_SYMBOLS: "0"
+          CONCURRENCY: "2"
+          REQUIRE_DATA: "true"
+        run: node scripts/scan-long.mjs
+      - name: Upload full-universe scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-seven-exchange-scan-results
+          path: scan-results.json
+          if-no-files-found: ignore
+          retention-days: 14
