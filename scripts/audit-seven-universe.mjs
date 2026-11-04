@@ -44,12 +44,21 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const rows = Array.isArray(payload?.data) ? payload.data : payload?.data?.contracts;
   if (Number(payload?.code) !== 0 || !Array.isArray(rows)) throw new Error("BingX contract metadata response shape was not recognized");
   const activeUsdt = rows.filter(x => Number(x.status) === 1 && String(x.currency).toUpperCase() === "USDT");
+  const spotPayload = await getJson("https://open-api.bingx.com/openApi/spot/v1/common/symbols");
+  const spotSymbols = Array.isArray(spotPayload?.data?.symbols) ? spotPayload.data.symbols : [];
+  const spotBases = new Set(spotSymbols.filter(x => Number(x.status) === 1).map(x => String(x.symbol).split("-")[0].toUpperCase()));
+  const spotBacked = activeUsdt.filter(x => spotBases.has(String(x.asset).toUpperCase()));
   report.venues.BingX = {
     all: summarize(rows, ["symbol", "status", "currency", "asset", "contractId"]),
     activeUsdtCandidate: {
       ...summarize(activeUsdt, ["symbol", "status", "currency", "asset"]),
       symbols: activeUsdt.map(x => x.symbol),
       assets: activeUsdt.map(x => x.asset)
+    },
+    activeSpotSymbolCount: spotSymbols.length,
+    activeUsdtContractsBackedBySpotBase: {
+      ...summarize(spotBacked, ["symbol", "status", "currency", "asset"]),
+      symbols: spotBacked.map(x => x.symbol)
     }
   };
 }
@@ -69,6 +78,8 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const apiSymbols = await getJson("https://api-contract.weex.com/capi/v3/market/apiTradingSymbols");
   if (!Array.isArray(apiSymbols)) throw new Error("WEEX apiTradingSymbols response was not an array");
   const apiEligible = candidate.filter(x => apiSymbols.includes(x.symbol));
+  const notApiEligible = candidate.filter(x => !apiSymbols.includes(x.symbol));
+  const suffixAliases = notApiEligible.filter(x => x.symbol.endsWith("S") && apiSymbols.includes(x.symbol.slice(0, -1)));
   report.venues.WEEX = {
     all: summarize(rows, ["symbol", "contractType", "underlyingType", "underlyingSubType", "quoteAsset", "marginAsset", "forwardContractFlag"]),
     usdtCryptoPerpetualCandidate: summarize(candidate, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
@@ -76,7 +87,8 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     apiEligibleUsdtCryptoPerpetual: {
       ...summarize(apiEligible, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
       symbols: apiEligible.map(x => x.symbol)
-    }
+    },
+    suffixAliasesNotInApiTradingSymbols: suffixAliases.map(x => ({ symbol: x.symbol, canonical: x.symbol.slice(0, -1) }))
   };
 }
 
@@ -93,8 +105,14 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   );
   const spotPayload = await getJson("https://api.huobi.pro/v1/common/symbols");
   const spotRows = Array.isArray(spotPayload?.data) ? spotPayload.data : [];
-  const spotBases = new Set(spotRows.filter(x => x.state === "online").map(x => String(x["base-currency"] ?? "").toUpperCase()));
-  const spotBacked = candidate.filter(x => spotBases.has(String(x.symbol ?? "").toUpperCase()));
+  const allSpotBases = new Set(spotRows.map(x => String(x["base-currency"] ?? "").toUpperCase()));
+  const onlineSpotBases = new Set(spotRows.filter(x => x.state === "online").map(x => String(x["base-currency"] ?? "").toUpperCase()));
+  const currencyPayload = await getJson("https://api.huobi.pro/v1/common/currencys");
+  const currencyRows = Array.isArray(currencyPayload?.data) ? currencyPayload.data : [];
+  const currencySet = new Set(currencyRows.map(x => String(typeof x === "string" ? x : x.currency ?? x.coin ?? "").toUpperCase()));
+  const contractBase = x => String(x.contract_code ?? "").split("-")[0].toUpperCase();
+  const spotBacked = candidate.filter(x => allSpotBases.has(contractBase(x)));
+  const currencyBacked = candidate.filter(x => currencySet.has(contractBase(x)));
   report.venues.HTX = {
     all: summarize(rows, ["contract_code", "symbol", "contract_status", "business_type", "contract_type", "trade_partition"]),
     activeUsdtSwapCandidate: {
@@ -103,9 +121,16 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
       symbols: candidate.map(x => x.symbol)
     },
     spotSymbolCount: spotRows.length,
+    allSpotBaseCount: allSpotBases.size,
+    onlineSpotBaseCount: onlineSpotBases.size,
     activeUsdtSwapsBackedBySpotBase: {
       ...summarize(spotBacked, ["contract_code", "symbol"]),
       contractCodes: spotBacked.map(x => x.contract_code)
+    },
+    currencyListCount: currencyRows.length,
+    activeUsdtSwapsBackedByCurrencyList: {
+      ...summarize(currencyBacked, ["contract_code", "symbol"]),
+      contractCodes: currencyBacked.map(x => x.contract_code)
     }
   };
 }
@@ -149,9 +174,13 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
       x.productType === "perpetual" &&
       String(x.quoteCoin).toUpperCase() === "USDT"
     );
+    const platesPayload = await getJson("https://fapi.xt.com/future/market/v1/public/plate/list");
+    const plates = Array.isArray(platesPayload?.result) ? platesPayload.result : platesPayload?.result?.items ?? [];
     report.venues.XT = {
       all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
-      usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"])
+      usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
+      platesMetadata: summarize(plates, ["id", "plateId", "name", "enName", "type", "category", "plateType"]),
+      usdtPerpetualSymbols: usdtPerpetual.map(x => ({ symbol: x.symbol, baseCoin: x.baseCoin, symbolGroupId: x.symbolGroupId, plates: x.plates, labels: x.labels }))
     };
   }
 }
