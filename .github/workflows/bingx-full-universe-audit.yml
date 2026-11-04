@@ -1,0 +1,28 @@
+name: BingX full USDT crypto perpetual universe audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/audits/bingx-full-universe-audit.mjs"
+      - ".github/workflows/bingx-full-universe-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check every active BingX crypto USDT perpetual Open Interest endpoint
+        run: node .github/audits/bingx-full-universe-audit.mjs
+      - name: Upload complete BingX universe report
+        if: always() && hashFiles('bingx-full-universe-audit.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: bingx-full-universe-audit
+          path: bingx-full-universe-audit.json
+          retention-days: 14
