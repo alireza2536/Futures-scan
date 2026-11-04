@@ -317,6 +317,12 @@ const baseFromPair = value => String(value ?? "").toUpperCase()
   .replace(/[_-]USDT$/, "")
   .replace(/USDTM?$/, "")
   .replace(/[_-]/g, "");
+const knownNonCryptoBases = new Set([
+  ...(report.venues.BingX?.knownNonCryptoByOfficialAssetPrefix?.assets ?? []),
+  ...(report.venues.WEEX?.knownNonCryptoByOfficialMetadata?.symbols ?? []),
+  ...(report.venues.KuCoin?.knownNonCryptoByOfficialMetadata?.bases ?? []),
+  ...(report.venues.XT?.nonCryptoUsdtPerpetual?.bases ?? [])
+].map(baseFromPair).filter(Boolean));
 const referenceBases = new Set([
   ...(report.venues.MEXC?.activeUsdtPerpetualCandidate?.bases ?? []),
   ...(report.venues.OKX?.activeUsdtSwapCandidate?.bases ?? []),
@@ -345,12 +351,6 @@ report.coingeckoReference = {
     geckoSymbolMatches: (report.venues.OKX?.activeUsdtSwapCandidate?.bases ?? []).filter(base => geckoSymbols.has(baseFromPair(base))).length
   }
 };
-const knownNonCryptoBases = new Set([
-  ...(report.venues.BingX?.knownNonCryptoByOfficialAssetPrefix?.assets ?? []),
-  ...(report.venues.WEEX?.knownNonCryptoByOfficialMetadata?.symbols ?? []),
-  ...(report.venues.KuCoin?.knownNonCryptoByOfficialMetadata?.bases ?? []),
-  ...(report.venues.XT?.nonCryptoUsdtPerpetual?.bases ?? [])
-].map(baseFromPair).filter(Boolean));
 const htxCodes = report.venues.HTX?.activeUsdtSwapCandidate?.contractCodes ?? [];
 const htxNonCrypto = htxCodes.filter(code => knownNonCryptoBases.has(baseFromPair(code)));
 const htxCryptoCandidate = htxCodes.filter(code => !knownNonCryptoBases.has(baseFromPair(code)));
