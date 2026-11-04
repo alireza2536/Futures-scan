@@ -10,8 +10,8 @@ async function requestJson(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
         signal: controller.signal
       });
       const body = await response.json();
-      if (response.status === 429 || body?.code === "50011") {
-        if (attempt === 4) throw new Error(`HTTP 429 rate limit for ${url}`);
+      if (response.status === 429 || ["50011", "100410", "100429"].includes(String(body?.code))) {
+        if (attempt === 4) throw new Error(`HTTP/API rate limit for ${url}: ${body?.code ?? response.status}`);
         await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)));
         continue;
       }
