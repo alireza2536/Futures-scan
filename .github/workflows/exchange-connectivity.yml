@@ -29,6 +29,16 @@ jobs:
         run: node --test scripts/test-strategy.mjs
       - name: Install CCXT adapters for final seven exchanges
         run: npm install --no-save --no-package-lock ccxt
+      - name: Audit official seven-exchange futures universe
+        continue-on-error: true
+        run: node scripts/audit-seven-universe.mjs
+      - name: Upload official futures universe audit
+        if: always() && hashFiles('seven-exchange-universe-audit.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: seven-exchange-official-universe-audit
+          path: seven-exchange-universe-audit.json
+          retention-days: 14
       - name: Test final seven exchanges across all five timeframes
         run: node scripts/check-final-seven-exchanges.mjs
       - name: Upload final seven-exchange API report
