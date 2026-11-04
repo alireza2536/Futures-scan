@@ -141,12 +141,26 @@ export async function fetchBingXHistory({
     }
     const before = byTime.size;
     for (const row of payload.data) {
-      if (!Array.isArray(row) || row.length < 6) continue;
-      const bar = {
-        timestamp: Number(row[0]), open: Number(row[1]), high: Number(row[2]),
-        low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), confirmed: null
-      };
-      const closeTime = Number(row[6] ?? (bar.timestamp + duration - 1));
+      let bar;
+      let rawCloseTime;
+      if (Array.isArray(row) && row.length >= 6) {
+        bar = {
+          timestamp: Number(row[0]), open: Number(row[1]), high: Number(row[2]),
+          low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), confirmed: null
+        };
+        rawCloseTime = row[6];
+      } else if (row && typeof row === "object") {
+        bar = {
+          timestamp: Number(row.time ?? row.timestamp ?? row.openTime),
+          open: Number(row.open), high: Number(row.high),
+          low: Number(row.low), close: Number(row.close), volume: Number(row.volume),
+          confirmed: null
+        };
+        rawCloseTime = row.closeTime;
+      } else {
+        continue;
+      }
+      const closeTime = Number(rawCloseTime ?? (bar.timestamp + duration - 1));
       if (closeTime >= now || bar.timestamp + duration > now || !validBar(bar)) continue;
       byTime.set(bar.timestamp, bar);
     }
