@@ -1,6 +1,6 @@
 import ccxt from "ccxt";
 import { writeFile } from "node:fs/promises";
-import { fetchOkxHistory, fetchMexcHistory, fetchCcxtHistory, fetchWeexHistory, fetchHtxHistory } from "./market-data.mjs";
+import { fetchOkxHistory, fetchMexcHistory, fetchCcxtHistory, fetchBingXHistory, fetchWeexHistory, fetchHtxHistory } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { loadExchangeUniverse } from "./symbol-universe.mjs";
 import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
@@ -35,6 +35,7 @@ async function scanSymbol(item,clients) {
     let raw;
     if(item.exchange==="OKX") raw=await fetchOkxHistory({base:item.apiBase,instId:item.symbol,bar:"4H",count:CANDLE_COUNT});
     else if(item.exchange==="MEXC") raw=await fetchMexcHistory({symbol:item.symbol,interval:"4h",count:CANDLE_COUNT});
+    else if(item.exchange==="BINGX") raw=await fetchBingXHistory({symbol:item.symbol,marketId:item.marketId,interval:"4h",count:CANDLE_COUNT+10});
     else if(item.exchange==="WEEX") raw=await fetchWeexHistory({symbol:item.symbol,marketId:item.marketId,interval:"4h",count:CANDLE_COUNT+10});
     else if(item.exchange==="HTX") raw=await fetchHtxHistory({symbol:item.symbol,marketId:item.marketId,interval:"4h",count:CANDLE_COUNT+10});
     else raw=await fetchCcxtHistory(clients.get(item.exchange),{symbol:item.symbol,interval:"4h",count:CANDLE_COUNT});
@@ -54,7 +55,7 @@ if(new Set(EXCHANGES).size!==EXCHANGES.length) throw new Error("Duplicate exchan
 const clients=new Map();
 try {
   const lists=await Promise.all(EXCHANGES.map(async label=>{
-    const needsCcxt=["BINGX","KUCOIN","XT"].includes(label);
+    const needsCcxt=["KUCOIN","XT"].includes(label);
     const client=needsCcxt?createClient(CONFIG[label]):null;
     if(client) clients.set(label,client);
     return loadExchangeUniverse(label,client);
