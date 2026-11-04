@@ -202,7 +202,13 @@ async function fetchHtxHistory(contractCode, timeframe, required) {
   return { bars, pages, complete: bars.length>=required, fresh: latest>=freshnessFloor, latest };
 }
 async function fetchVenueHistory(config, exchange, market, timeframe, required) {
-  if (config.id === "bingx") return fetchBingXHistory({ symbol: market.symbol, marketId: market.id, interval: timeframe, count: required });
+  if (config.id === "bingx") {
+    const bars = await fetchBingXHistory({ symbol: market.symbol, marketId: market.id, interval: timeframe, count: required });
+    const latest = bars.at(-1)?.timestamp;
+    const duration = MS[timeframe];
+    const freshnessFloor = Math.floor(Date.now()/duration)*duration - 2*duration;
+    return { bars, pages: null, complete: bars.length >= required, fresh: Number.isFinite(latest) && latest >= freshnessFloor, latest };
+  }
   if (config.id === "htx") return fetchHtxHistory(market.id || market.symbol.replace("/", "-").replace(":USDT", ""), timeframe, required);
   if (config.id === "weex" && timeframe === "1h") return fetchWeex1hHistory(market, required);
   return fetchHistory(exchange, market.symbol, timeframe, required);
