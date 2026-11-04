@@ -135,3 +135,35 @@ export async function fetchMexcHistory({
   }
   return bars.slice(-count);
 }
+
+
+const CCXT_INTERVALS = { '15m':'15m', '1h':'1h', '2h':'2h', '4h':'4h', '1d':'1d' };
+
+export async function fetchCcxtHistory(exchange, { symbol, interval='4h', count=1201 } = {}) {
+  const timeframe = CCXT_INTERVALS[interval];
+  if (!timeframe || !exchange.timeframes?.[timeframe]) throw new Error(exchange.id + ' does not support ' + interval + ' OHLCV history');
+  if (!Number.isInteger(count) || count < 2) throw new Error('count must be an integer >= 2');
+  const duration = { '15m':900000, '1h':3600000, '2h':7200000, '4h':14400000, '1d':86400000 }[interval];
+  const collected = new Map();
+  const target = count + 2;
+  let since = Date.now() - duration * (target + 4);
+  let pages = 0;
+  while (collected.size < target && pages < Math.ceil(target / 100) + 20) {
+    const before = collected.size;
+    const rows = await exchange.fetchOHLCV(symbol, timeframe, since, Math.min(1000, Math.max(100, target-collected.size+5)));
+    if (!Array.isArray(rows) || rows.length === 0) break;
+    for (const row of rows) {
+      if (!Array.isArray(row) || row.length < 6) continue;
+      const bar = { timestamp:Number(row[0]), open:Number(row[1]), high:Number(row[2]), low:Number(row[3]), close:Number(row[4]), volume:Number(row[5]), confirmed:null };
+      if (validBar(bar) && bar.timestamp + duration <= Date.now()) collected.set(bar.timestamp, bar);
+    }
+    const times = rows.map(row => Number(row?.[0])).filter(Number.isFinite);
+    const newest = times.length ? Math.max(...times) : NaN;
+    if (!Number.isFinite(newest) || collected.size === before) break;
+    since = newest + duration;
+    pages += 1;
+  }
+  const bars = dedupeAndSort([...collected.values()]);
+  if (bars.length < count) throw new Error(exchange.id + ' returned only ' + bars.length + '/' + count + ' closed valid ' + interval + ' candles for ' + symbol + ' after ' + pages + ' pages');
+  return bars.slice(-count);
+}
