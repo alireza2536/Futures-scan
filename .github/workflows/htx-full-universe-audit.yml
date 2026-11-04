@@ -1,0 +1,28 @@
+name: HTX full USDT crypto perpetual universe audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/audits/htx-full-universe-audit.mjs"
+      - ".github/workflows/htx-full-universe-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check current OI for every official-label-filtered HTX crypto contract
+        run: node .github/audits/htx-full-universe-audit.mjs
+      - name: Upload complete HTX universe report
+        if: always() && hashFiles('htx-full-universe-audit.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: htx-full-universe-audit
+          path: htx-full-universe-audit.json
+          retention-days: 14
