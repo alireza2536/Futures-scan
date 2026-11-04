@@ -228,17 +228,24 @@ async function getWeexSymbols() {
 }
 
 async function getHtxSymbols() {
-  const payload = await getJson("https://api.hbdm.com/linear-swap-api/v1/linear_swap_contract_info?business_type=all&trade_partition=CRYPTO");
+  const payload = await getJson("https://api.hbdm.com/linear-swap-api/v1/swap_contract_info");
   if (payload?.status !== "ok" || !Array.isArray(payload?.data)) {
-    throw new Error("HTX official CRYPTO partition catalog schema/status check failed");
+    throw new Error("HTX swap_contract_info catalog schema/status check failed");
   }
-  const rows = payload.data.filter(row =>
+  const activeUsdtRows = payload.data.filter(row =>
     Number(row?.contract_status) === 1 &&
     usdtSymbol("HTX", row?.contract_code) &&
-    String(row?.settle_currency ?? row?.quote_currency ?? "USDT").toUpperCase() === "USDT" &&
+    String(row?.settle_currency ?? row?.quote_currency ?? "USDT").toUpperCase() === "USDT"
+  );
+  const rows = activeUsdtRows.filter(row =>
+    Array.isArray(row?.tradfi_labels) &&
     !hasHtxOfficialTradFiLabel(row) &&
     !isExplicitTradFiContract(row)
   );
+  const missingOfficialLabels = activeUsdtRows.filter(row => !Array.isArray(row?.tradfi_labels)).length;
+  if (missingOfficialLabels) {
+    throw new Error(`HTX omitted official TradFi labels for ${missingOfficialLabels} active USDT contract(s); refusing unclassified contracts`);
+  }
   if (!rows.length) throw new Error("HTX returned no officially crypto-classified active USDT swaps");
   return rows.map(row => ({
     exchange: "HTX", symbol: row.contract_code, display: row.contract_code,
