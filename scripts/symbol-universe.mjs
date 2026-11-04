@@ -159,7 +159,7 @@ async function getOkxSymbols() {
   throw lastError ?? new Error("OKX crypto USDT SWAP catalog unavailable");
 }
 
-async function getBingxSymbols(client) {
+async function getBingxSymbols() {
   const payload = await getJson("https://open-api.bingx.com/openApi/swap/v2/quote/contracts");
   if (!(payload?.code === 0 || payload?.code === "0") || !Array.isArray(payload?.data)) {
     throw new Error("BingX contract catalog schema/status check failed");
@@ -170,7 +170,11 @@ async function getBingxSymbols(client) {
     return !status || ["TRADING", "ACTIVE", "ONLINE", "1"].includes(status);
   });
   if (!rows.length) throw new Error("BingX returned no active crypto USDT perpetuals after official TradFi exclusions");
-  return mapOfficialSymbolsToCcxt("BINGX", client, rows, row => row.symbol, row => row.asset);
+  console.log(JSON.stringify({event:"bingx_crypto_universe", count:rows.length, source:"official contracts catalog"}));
+  return rows.map(row => ({
+    exchange:"BINGX", symbol:row.symbol, display:row.symbol,
+    base:row.asset || row.symbol.split("-")[0], marketId:row.symbol
+  }));
 }
 
 async function getWeexSymbols() {
@@ -305,9 +309,7 @@ export async function loadExchangeUniverse(exchange, client = null) {
   switch (String(exchange).toUpperCase()) {
     case "MEXC": return getMexcSymbols();
     case "OKX": return getOkxSymbols();
-    case "BINGX":
-      if (!client) throw new Error("BingX CCXT client is required for OHLCV mapping");
-      return getBingxSymbols(client);
+    case "BINGX": return getBingxSymbols();
     case "WEEX": return getWeexSymbols();
     case "HTX": return getHtxSymbols();
     case "KUCOIN":
