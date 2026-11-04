@@ -91,6 +91,9 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const cryptoPrefixCandidate = activeUsdt.filter(x =>
     !["NCCO", "NCFX", "NCS"].some(prefix => String(x.asset).toUpperCase().startsWith(prefix))
   );
+  const knownNonCrypto = activeUsdt.filter(x =>
+    ["NCCO", "NCFX", "NCS"].some(prefix => String(x.asset).toUpperCase().startsWith(prefix))
+  );
   report.venues.BingX = {
     all: summarize(rows, ["symbol", "status", "currency", "asset", "contractId"]),
     activeUsdtCandidate: {
@@ -102,6 +105,11 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     activeUsdtContractsBackedBySpotBase: {
       ...summarize(spotBacked, ["symbol", "status", "currency", "asset"]),
       symbols: spotBacked.map(x => x.symbol)
+    },
+    knownNonCryptoByOfficialAssetPrefix: {
+      ...summarize(knownNonCrypto, ["symbol", "asset"]),
+      symbols: knownNonCrypto.map(x => x.symbol),
+      assets: knownNonCrypto.map(x => x.asset)
     },
     nonCryptoAssetPrefixFilteredCandidate: {
       ...summarize(cryptoPrefixCandidate, ["symbol", "asset"]),
@@ -130,6 +138,10 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
   const suffixAliases = notApiEligible.filter(x => x.symbol.endsWith("S") && apiSymbols.includes(x.symbol.slice(0, -1)));
   const nonTradFi = candidate.filter(x => !(Array.isArray(x.underlyingSubType) && x.underlyingSubType.includes("TradFi")));
   const apiEligibleNonTradFi = apiEligible.filter(x => !(Array.isArray(x.underlyingSubType) && x.underlyingSubType.includes("TradFi")));
+  const knownNonCrypto = rows.filter(x =>
+    x.underlyingType !== "COIN" ||
+    (Array.isArray(x.underlyingSubType) && x.underlyingSubType.includes("TradFi"))
+  );
   report.venues.WEEX = {
     all: summarize(rows, ["symbol", "contractType", "underlyingType", "underlyingSubType", "quoteAsset", "marginAsset", "forwardContractFlag"]),
     usdtCryptoPerpetualCandidate: summarize(candidate, ["symbol", "contractType", "underlyingType", "underlyingSubType"]),
@@ -145,6 +157,10 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     nonTradFiCandidate: {
       ...summarize(nonTradFi, ["symbol", "underlyingSubType"]),
       symbols: nonTradFi.map(x => x.symbol)
+    },
+    knownNonCryptoByOfficialMetadata: {
+      ...summarize(knownNonCrypto, ["symbol", "underlyingType", "underlyingSubType"]),
+      symbols: knownNonCrypto.map(x => x.symbol)
     },
     suffixAliasesNotInApiTradingSymbols: suffixAliases.map(x => ({ symbol: x.symbol, canonical: x.symbol.slice(0, -1) }))
   };
@@ -205,12 +221,18 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
     x.marketType === "CRYPTO" &&
     x.assetClass === "CRYPTO"
   );
+  const knownNonCrypto = rows.filter(x => x.marketType !== "CRYPTO" || x.assetClass !== "CRYPTO");
   report.venues.KuCoin = {
     all: summarize(rows, ["symbol", "status", "quoteCurrency", "settleCurrency", "marketType", "assetClass"]),
     activeUsdtCryptoCandidate: {
       ...summarize(candidate, ["symbol", "status", "quoteCurrency", "settleCurrency", "marketType", "assetClass"]),
       symbols: candidate.map(x => x.symbol),
       bases: candidate.map(x => String(x.baseCurrency ?? x.base ?? "").toUpperCase())
+    },
+    knownNonCryptoByOfficialMetadata: {
+      ...summarize(knownNonCrypto, ["symbol", "marketType", "assetClass"]),
+      symbols: knownNonCrypto.map(x => x.symbol),
+      bases: knownNonCrypto.map(x => String(x.baseCurrency ?? x.base ?? "").toUpperCase())
     }
   };
 }
@@ -244,11 +266,19 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
       x.tradeSwitch === true && x.openSwitch === true && x.isOpenApi === true &&
       !(Array.isArray(x.plates) && x.plates.some(id => nonCryptoPlateIds.has(Number(id))))
     );
+    const nonCryptoUsdtPerpetual = usdtPerpetual.filter(x =>
+      Array.isArray(x.plates) && x.plates.some(id => nonCryptoPlateIds.has(Number(id)))
+    );
     report.venues.XT = {
       all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
       usdtPerpetualCandidate: summarize(usdtPerpetual, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
       platesMetadata: summarize(plates, ["id", "plate", "symbolSortRule"]),
       nonCryptoPlateIds: [...nonCryptoPlateIds],
+      nonCryptoUsdtPerpetual: {
+        ...summarize(nonCryptoUsdtPerpetual, ["symbol", "baseCoin", "plates"]),
+        symbols: nonCryptoUsdtPerpetual.map(x => x.symbol),
+        bases: nonCryptoUsdtPerpetual.map(x => String(x.baseCoin ?? "").toUpperCase())
+      },
       cryptoOnlyCandidate: {
         ...summarize(cryptoOnly, ["symbol", "baseCoin", "symbolGroupId", "plates", "labels"]),
         symbols: cryptoOnly.map(x => x.symbol),
