@@ -48,7 +48,20 @@ async function fetchHistory(exchange, symbol, timeframe, required) {
     const before = collected.size;
     const remaining = target - collected.size;
     const limit = Math.min(1000, Math.max(100, remaining + 10));
-    const rows = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+    let rows;
+    let lastFetchError;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        rows = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+        lastFetchError = null;
+        break;
+      } catch (error) {
+        lastFetchError = error;
+        if (attempt === 3) break;
+        await sleep(1500 * (attempt + 1));
+      }
+    }
+    if (lastFetchError) throw lastFetchError;
     if (!Array.isArray(rows) || rows.length === 0) break;
     for (const bar of toBars(rows, timeframe)) collected.set(bar.timestamp, bar);
     const timestamps = rows.map(row => Number(row?.[0])).filter(Number.isFinite);
@@ -243,7 +256,8 @@ async function checkExchange(config) {
 
     let oneHour = null;
     try {
-      oneHour = await fetchVenueHistory(config, exchange, btc, "1h", NEED["1h"]);
+      // Keep extra closed 1h bars so missing intervals do not prevent a full 2h aggregation.
+      oneHour = await fetchVenueHistory(config, exchange, btc, "1h", NEED["1h"] + 250);
       const cci1h = oneHour.bars.length >= 1200 ? calculateCCI(oneHour.bars, 1200).at(-1) : null;
       const ema2000 = oneHour.complete ? calculateEMA(oneHour.bars.map(x=>x.close), 2000).at(-1) : null;
       const close1h = oneHour.bars.at(-1)?.close;
@@ -287,7 +301,9 @@ async function checkExchange(config) {
       addCheck(result, "2h history + EMA2000 + CCI1200", ok,
         `${twoHour.bars.length} closed candles; ${twoHourMethod}; EMA2000=${ema2000_2h}; CCI1200=${cci2h}; longConditionNow=${rulePass}; latest=${new Date(twoHour.latest).toISOString()}`, true);
     } else {
-      addCheck(result, "2h history + CCI1200", false, "No fresh 1200-candle native 2h history or valid 1h aggregation", true);
+      const derivedCount = oneHour?.bars ? aggregate1hTo2h(oneHour.bars).length : 0;
+      addCheck(result, "2h history + CCI1200", false,
+        `No fresh 2000-candle native 2h history or valid 1h aggregation; complete 2h buckets from available 1h data=${derivedCount}`, true);
     }
 
     try {
