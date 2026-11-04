@@ -41,8 +41,8 @@ jobs:
           retention-days: 14
       - name: Smoke-test live scanner on BTC perpetuals
         env:
-          EXCHANGES: OKX,MEXC
-          SYMBOLS: BTC-USDT-SWAP,BTC_USDT
+          EXCHANGES: MEXC,BingX,OKX,WEEX,HTX,KuCoin,XT
+          SYMBOLS: BTC
           CONCURRENCY: "1"
           REQUIRE_DATA: "true"
         run: node scripts/scan-long.mjs
