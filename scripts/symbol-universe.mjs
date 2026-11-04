@@ -71,6 +71,7 @@ function isBingXTradFiSymbol(symbol) {
 
 function usdtSymbol(exchange, symbol) {
   if (typeof symbol !== "string") return false;
+  if (exchange === "MEXC") return symbol.endsWith("_USDT");
   if (exchange === "BINGX") return symbol.endsWith("-USDT");
   if (exchange === "WEEX") return symbol.toUpperCase().endsWith("USDT");
   if (exchange === "HTX") return symbol.endsWith("-USDT");
