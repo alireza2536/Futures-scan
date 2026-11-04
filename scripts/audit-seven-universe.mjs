@@ -331,7 +331,7 @@ const report = { generatedAt: new Date().toISOString(), venues: {} };
       !isExplicitTradFiContract(x)
     );
     const nonCryptoUsdtPerpetual = usdtPerpetual.filter(x =>
-      Array.isArray(x.plates) && x.plates.some(id => nonCryptoPlateIds.has(Number(id)))
+      Array.isArray(x.plates) && x.plates.some(id => tradfiIds.has(Number(id)))
     );
     report.venues.XT = {
       all: summarize(rows, ["symbol", "baseCoin", "quoteCoin", "contractType", "productType", "underlyingType", "state", "tradeSwitch", "openSwitch", "isOpenApi", "isDisplay", "displaySwitch", "symbolGroupId", "labels", "plates"]),
