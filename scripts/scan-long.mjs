@@ -4,7 +4,7 @@ import { fetchOkxHistory, fetchMexcHistory, fetchCcxtHistory } from "./market-da
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
 
-const CANDLE_COUNT = 1201;
+const CANDLE_COUNT = 1202;
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 2);
 const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC").split(",").map(x => x.trim().toUpperCase()).filter(Boolean);
 const MAX_SYMBOLS = Number(process.env.MAX_SYMBOLS ?? 0);
