@@ -46,3 +46,11 @@ jobs:
           CONCURRENCY: "1"
           REQUIRE_DATA: "true"
         run: node scripts/scan-long.mjs
+      - name: Upload BTC scanner smoke-test results
+        if: always() && hashFiles('scan-results.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: btc-scanner-smoke-results
+          path: scan-results.json
+          if-no-files-found: ignore
+          retention-days: 14
