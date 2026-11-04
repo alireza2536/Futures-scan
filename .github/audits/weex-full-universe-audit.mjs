@@ -58,10 +58,15 @@ const eligibleNotInApiTrading=symbols.filter(s=>!tradableSet.has(s.toUpperCase()
 const tradableNotEligible=[...tradableSet].filter(s=>!eligibleSet.has(s));
 const tradableTradfiOverlap=tradableNotEligible.filter(s=>tradfiSet.has(s));
 const tradableUnclassified=tradableNotEligible.filter(s=>!tradfiSet.has(s));
+const unclassifiedRows=catalog.symbols.filter(row=>tradableUnclassified.includes(String(row?.symbol??"").toUpperCase())).map(row=>({
+ symbol:row.symbol,contractType:row.contractType,underlyingType:row.underlyingType,
+ underlyingSubType:row.underlyingSubType,marginAsset:row.marginAsset,quoteAsset:row.quoteAsset,
+ forwardContractFlag:row.forwardContractFlag,tradfi:tradfiSet.has(String(row.symbol??"").toUpperCase())
+}));
 const report={
  generatedAt:new Date().toISOString(),
  catalogs:{perpetualRows:catalog.symbols.length,tradfiRows:tradfi.symbols.length,apiTradingSymbols:apiTrading.length,statusFieldPresent,statusFieldMissing:catalog.symbols.length-statusFieldPresent,statusCounts},
- filtering:{tradfiSymbolsExcluded:tradfiSet.size,contractCandidates:contractCandidates.length,uniqueEligibleSymbols:symbols.length,eligibleNotInApiTrading:eligibleNotInApiTrading.length,tradableNotEligible:tradableNotEligible.length,tradableTradfiOverlap:tradableTradfiOverlap.length,tradableUnclassified:tradableUnclassified.length,unclassifiedExamples:tradableUnclassified.slice(0,30)},
+ filtering:{tradfiSymbolsExcluded:tradfiSet.size,contractCandidates:contractCandidates.length,uniqueEligibleSymbols:symbols.length,eligibleNotInApiTrading:eligibleNotInApiTrading.length,tradableNotEligible:tradableNotEligible.length,tradableTradfiOverlap:tradableTradfiOverlap.length,tradableUnclassified:tradableUnclassified.length,unclassifiedRows},
  openInterest:{requested:symbols.length,passed,failed:failed.length,failedSymbols:failed},
  result:symbols.length>0&&passed===symbols.length&&eligibleNotInApiTrading.length===0&&tradableUnclassified.length===0?"PASS":"FAIL"
 };
