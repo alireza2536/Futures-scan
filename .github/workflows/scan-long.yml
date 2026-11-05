@@ -34,6 +34,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Test unique asset grouping
+        run: node --test scripts/test-unique-assets.mjs
       - name: Test initial universe gate, indicators and strategy formulas
         run: |
           node --test scripts/test-initial-filter.mjs
