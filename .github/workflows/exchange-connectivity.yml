@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Test unique asset grouping
+        run: node --test scripts/test-unique-assets.mjs
       - name: Test initial universe entry gate
         run: node --test scripts/test-initial-filter.mjs
       - name: Run deterministic indicator tests
