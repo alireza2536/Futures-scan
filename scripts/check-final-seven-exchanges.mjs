@@ -242,7 +242,7 @@ function addCheck(result, name, ok, detail, core=false) {
   result.checks.push({ test: name, status: ok ? "PASS" : "FAIL", core, detail });
 }
 async function checkExchange(config) {
-  const result = { exchange: config.label, ccxt: config.id, status: "FAIL", coreStatus: "FAIL", optionalStatus: "PARTIAL", checks: [], history: {}, indicators: {} };
+  const result = { exchange: config.label, ccxt: config.id, status: "FAIL", coreStatus: "FAIL", checks: [], history: {}, indicators: {} };
   if (!ccxt.exchanges.includes(config.id)) {
     addCheck(result, "CCXT adapter", false, "Adapter missing from installed CCXT", true);
     return result;
@@ -369,7 +369,6 @@ async function checkExchange(config) {
     const timeframeChecks = coreChecks.filter(x => /^(15m|1h|2h|4h|Daily) history/.test(x.test));
     result.timeframeStatus = timeframeChecks.length === 5 && timeframeChecks.every(x => x.status === "PASS") ? "PASS" : "FAIL";
     result.coreStatus = coreChecks.length === 7 && coreChecks.every(x => x.status === "PASS") ? "PASS" : "FAIL";
-    result.optionalStatus = "NOT USED FOR TIMEFRAME QUALIFICATION";
     result.status = result.coreStatus;
     if (exchange.has?.fetchOpenInterest) {
       try {
@@ -398,9 +397,9 @@ for (const config of EXCHANGES) {
   console.log(JSON.stringify(result));
 }
 const corePassed = report.filter(x=>x.coreStatus==="PASS").length;
-const optionalFull = report.filter(x=>x.optionalStatus==="PASS").length;
+const timeframePassed = report.filter(x=>x.timeframeStatus==="PASS").length;
 const coreFailed = report.length-corePassed;
-const payload = { generatedAt: new Date().toISOString(), candidateExchanges: EXCHANGES.map(x=>x.label), results: report, summary: { corePassed, coreFailed, optionalFull, total: report.length } };
+const payload = { generatedAt: new Date().toISOString(), candidateExchanges: EXCHANGES.map(x=>x.label), results: report, summary: { corePassed, coreFailed, timeframePassed, total: report.length } };
 await writeFile("final-seven-exchange-api-report.json", JSON.stringify(payload,null,2));
-console.log(`FINAL | CORE=${corePassed}/7 PASS | OPTIONAL_ALL_TIMEFRAMES=${optionalFull}/7 PASS | CORE_FAILED=${coreFailed}`);
+console.log(`FINAL | API_AND_MARKETS=${corePassed}/7 PASS | FIVE_TIMEFRAMES=${timeframePassed}/7 PASS | FAILED=${coreFailed}`);
 if (corePassed !== 7) process.exitCode = 1;
