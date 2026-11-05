@@ -81,7 +81,8 @@ async function fetchHistory(exchange, symbol, timeframe, required) {
     pages += 1;
     await sleep(Math.max(100, Number(exchange.rateLimit) || 100));
   }
-  const bars = [...collected.values()].sort((a,b) => a.timestamp-b.timestamp).slice(-required);
+  // Keep the extra history margin: the 2h fallback needs complete aligned pairs of 1h candles.
+  const bars = [...collected.values()].sort((a,b) => a.timestamp-b.timestamp).slice(-target);
   if (bars.length === 0) throw new Error(`No closed valid ${timeframe} candles returned after ${pages} pages`);
   const latest = bars.at(-1);
   const freshnessFloor = Math.floor(Date.now()/duration)*duration - duration*2;
@@ -160,7 +161,8 @@ async function fetchWeex1hHistory(market, required) {
     if(byTime.size===before) break;
     await sleep(300);
   }
-  const bars=[...byTime.values()].sort((a,b)=>a.timestamp-b.timestamp).slice(-required);
+  // Keep the extra history margin so 1h data can form the full required 2h series.
+  const bars=[...byTime.values()].sort((a,b)=>a.timestamp-b.timestamp).slice(-target);
   if(!bars.length) throw new Error("WEEX direct history API returned no valid 1h candles");
   const latest=bars.at(-1).timestamp;
   const freshnessFloor=Math.floor(Date.now()/duration)*duration-2*duration;
