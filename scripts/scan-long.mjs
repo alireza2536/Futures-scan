@@ -5,6 +5,7 @@ import {
   isLongSetupForSelectedTimeframes, keepClosedCandles, LONG_RULE_LABELS
 } from "./strategy.mjs";
 import { filterInitialUniverse, isUsdStablecoinBase } from "./initial-filter.mjs";
+import { buildUniqueAssetList } from "./unique-assets.mjs";
 
 const CANDLE_COUNT_BY_TIMEFRAME = { "15m": 1200, "1h": 2000, "2h": 2000, "4h": 1200, "1d": 50 };
 const OKX_BAR_BY_TIMEFRAME = { "15m": "15m", "1h": "1H", "2h": "2H", "4h": "4H", "1d": "1D" };
@@ -179,6 +180,7 @@ async function scanSymbol(item) {
     return {
       exchange: item.exchange,
       symbol: item.display,
+      baseAsset: item.baseAsset,
       status: passed ? "LONG" : "NO_MATCH",
       selectedTimeframes: SELECTED_TIMEFRAMES,
       timeframes: Object.fromEntries(SELECTED_TIMEFRAMES.map(timeframe => [
@@ -192,6 +194,7 @@ async function scanSymbol(item) {
     return {
       exchange: item.exchange,
       symbol: item.display,
+      baseAsset: item.baseAsset,
       status: "DATA_ERROR",
       error: error.message
     };
@@ -251,19 +254,25 @@ const results = await mapLimit(universe, CONCURRENCY, async item => {
 });
 const matches = results.filter(item => item.status === "LONG");
 const errors = results.filter(item => item.status === "DATA_ERROR");
+const uniqueAssets = buildUniqueAssetList(results);
+const uniqueLongAssets = uniqueAssets.filter(item => item.qualifiedExchanges.length > 0);
 const summary = {
   generatedAt: new Date().toISOString(),
   direction: "LONG",
   selectedTimeframes: SELECTED_TIMEFRAMES,
   rule: SELECTED_TIMEFRAMES.map(timeframe => LONG_RULE_LABELS[timeframe]).join(" AND "),
   exchanges: EXCHANGES,
-  scanned: results.length,
-  longMatches: matches.length,
+  scannedContracts: results.length,
+  uniqueAssetCount: uniqueAssets.length,
+  longMatchContracts: matches.length,
+  uniqueLongAssetCount: uniqueLongAssets.length,
   dataErrors: errors.length,
+  uniqueAssets,
+  uniqueLongAssets,
   matches,
   errors
 };
 await writeFile("scan-results.json", JSON.stringify(summary, null, 2));
-console.log(`SUMMARY | scanned=${results.length} | LONG=${matches.length} | DATA_ERROR=${errors.length}`);
+console.log(`SUMMARY | contracts=${results.length} | uniqueAssets=${uniqueAssets.length} | LONG contracts=${matches.length} | unique LONG assets=${uniqueLongAssets.length} | DATA_ERROR=${errors.length}`);
 console.log("RESULT_FILE | scan-results.json");
 if (REQUIRE_DATA && errors.length > 0) process.exitCode = 1;
