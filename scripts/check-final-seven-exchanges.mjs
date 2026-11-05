@@ -37,6 +37,29 @@ function toBars(rows, timeframe) {
   }
   return [...byTime.values()].sort((a,b) => a.timestamp-b.timestamp);
 }
+async function fetchOhlcvWithRetry(exchange, symbol, timeframe, since, limit) {
+  const retryableTypes = [
+    ccxt.RateLimitExceeded, ccxt.NetworkError, ccxt.ExchangeNotAvailable,
+    ccxt.RequestTimeout, ccxt.DDoSProtection
+  ].filter(Boolean);
+  let lastError;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || error);
+      const retryable = retryableTypes.some(Type => error instanceof Type) ||
+        /100410|请稍后重试|try again|temporarily unavailable|rate.?limit|HTTP 429|HTTP 5\d\d/i.test(message);
+      if (!retryable || attempt === 4) throw error;
+      const delay = Math.min(1000 * (2 ** (attempt + 1)), 10000);
+      console.warn(`RETRY | ${exchange.id} ${symbol} ${timeframe} | attempt=${attempt + 1}/4 | wait=${delay}ms | ${message.slice(0, 160)}`);
+      await sleep(delay);
+    }
+  }
+  throw lastError ?? new Error("OHLCV request failed");
+}
+
 async function fetchHistory(exchange, symbol, timeframe, required) {
   if (!exchange.timeframes?.[timeframe]) throw new Error(`Timeframe ${timeframe} not supported by CCXT adapter`);
   const duration = MS[timeframe];
@@ -48,7 +71,7 @@ async function fetchHistory(exchange, symbol, timeframe, required) {
     const before = collected.size;
     const remaining = target - collected.size;
     const limit = Math.min(1000, Math.max(100, remaining + 10));
-    const rows = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+    const rows = await fetchOhlcvWithRetry(exchange, symbol, timeframe, since, limit);
     if (!Array.isArray(rows) || rows.length === 0) break;
     for (const bar of toBars(rows, timeframe)) collected.set(bar.timestamp, bar);
     const timestamps = rows.map(row => Number(row?.[0])).filter(Number.isFinite);
