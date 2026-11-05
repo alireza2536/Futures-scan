@@ -1,5 +1,5 @@
 import { createCcxtAdapter, supportedCcxtExchanges } from "./ccxt-adapters.mjs";
-import { evaluateEntryEligibility } from "./entry-filters.mjs";
+import { evaluateEntryEligibility, isNonCryptoBase } from "./entry-filters.mjs";
 
 const REQUIRED=["OKX","MEXC",...supportedCcxtExchanges()];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -65,12 +65,12 @@ try{
       const invalid=markets.filter(x=>!x.symbol||!x.baseAsset||x.quote!=="USDT"||x.settle!=="USDT"||!x.active);
       const missingPrices=markets.filter(x=>!Number.isFinite(x.price)||x.price<=0);
       const eligible=markets.filter(x=>evaluateEntryEligibility({baseAsset:x.baseAsset,lastPrice:x.price}).eligible);
-      const rejected=markets.length-eligible.length;
+      const rejected=markets.length-eligible.length;\n      const nonCrypto=markets.filter(x=>isNonCryptoBase(x.baseAsset));
       const pass=markets.length>0&&duplicates===0&&invalid.length===0;
       const row={exchange:name,status:pass?(missingPrices.length?"PASS_WITH_MISSING_TICKERS_EXCLUDED":"PASS"):"FAIL",activeUsdtPerpetuals:markets.length,uniqueSymbols:unique.size,
         duplicateSymbols:duplicates,invalidContractMetadata:invalid.length,missingOrInvalidTickers:missingPrices.length,missingTickerExamples:missingPrices.slice(0,12).map(x=>x.symbol),
-        eligibleAfterApprovedFilters:eligible.length,rejectedByApprovedFilters:rejected,
-        filterRule:"exclude stablecoin base assets; include last price <= 30 USD; missing/nonpositive price rejected",
+        eligibleAfterApprovedFilters:eligible.length,rejectedByApprovedFilters:rejected,excludedNonCryptoUnderlyings:nonCrypto.length,nonCryptoExamples:nonCrypto.slice(0,20).map(x=>x.symbol),
+        filterRule:"exclude stablecoin and non-crypto underlyings; include last price <= 30 USD; missing/nonpositive price rejected",
         sampleSymbols:markets.slice(0,5).map(x=>x.symbol)};
       results.push(row);
       console.log(JSON.stringify(row));
