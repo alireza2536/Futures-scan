@@ -58,3 +58,28 @@ npm run scan
 - دسترسی زنده و مقایسه مقادیر اندیکاتورها با TradingView هنوز انجام نشده است.
 - اتصال Neon در محیط اجرا با DATABASE_URL هنوز پیکربندی و آزمون نشده است.
 - رابط کاربری وب و انتخابگر تایم‌فریم‌ها هنوز ساخته نشده‌اند.
+
+
+## 5m timeframe coverage
+
+The 5m timeframe is an independent market-data timeframe; it does not add or alter any long/short entry condition.
+
+- OKX uses the native `5m` candle interval.
+- MEXC USDT perpetual contracts use the documented `Min5` interval.
+- The scanner requests two extra candles, removes any still-forming candle, then selects exactly 1,201 closed candles.
+- Before calculating indicators, the 5m history must pass timestamp alignment and strict 5-minute continuity checks. Missing, duplicated, overlapping, misaligned, or unclosed candles cause that symbol/timeframe to be reported as `DATA_ERROR`; the scanner does not silently calculate from a broken series.
+- EMA9, EMA21, EMA500, CCI(1200), and session VWAP are calculated from that verified history. These are data outputs only; no new trade signal or direction rule is added.
+
+Run the automated structural tests:
+
+```bash
+npm test
+```
+
+Run the live 5m API check for BTC USDT perpetual on the two currently implemented adapters:
+
+```bash
+npm run test:5m:live
+```
+
+The live check needs outbound access to both exchange APIs. A PASS means that exchange returned 1,201 closed, continuous 5m candles and the indicator calculations returned finite values at the time of the test; it does not certify the other five candidate exchanges.
