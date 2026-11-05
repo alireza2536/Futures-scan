@@ -16,7 +16,7 @@ async function verify(exchange,timeframe,fetcher){
     for(const key of ["close","ema9","ema21","ema","cci","vwap"]){
       if(!Number.isFinite(values[key])) throw new Error("non-finite "+key);
     }
-    const age=Date.now()-bars.at(-1).timestamp;
+    const age=Date.now()-(bars.at(-1).timestamp+intervalMs);
     if(age<0||age>intervalMs*2) throw new Error("stale last closed candle: "+age+"ms");
     return {exchange,timeframe,status:"PASS",closedCandles:bars.length,lastClosedAt:new Date(bars.at(-1).timestamp).toISOString()};
   }catch(error){return {exchange,timeframe,status:"FAIL",error:error.message};}
