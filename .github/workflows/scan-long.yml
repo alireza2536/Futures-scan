@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       exchanges:
-        description: "Exchanges to scan (OKX,MEXC)"
+        description: "Approved seven exchanges"
         required: true
-        default: "OKX,MEXC"
+        default: "OKX,MEXC,BINGX,WEEX,HTX,KUCOIN,XT"
       max_symbols:
         description: "0 = all eligible USDT perpetual contracts; positive = test limit"
         required: true
