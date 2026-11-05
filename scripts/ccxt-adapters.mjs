@@ -210,7 +210,7 @@ export async function createCcxtAdapter(exchangeName) {
     let tickers;
     try{tickers=await client.fetchTickers(markets.map(m=>m.symbol));}
     catch{tickers=await client.fetchTickers();}
-    const symbols=markets.map(m=>({exchange:exchangeName,symbol:m.symbol,baseAsset:m.base,display:m.symbol,lastPriceUsd:Number(tickers?.[m.symbol]?.last)}));
+    const symbols=markets.map(m=>({exchange:exchangeName,symbol:m.symbol,baseAsset:m.base,display:m.symbol,lastPriceUsd:Number(tickers?.[m.symbol]?.last),marketType:m.type,marketSubtype:m.subType??m.subtype,contract:m.contract,swap:m.swap,linear:m.linear,marketInfo:m.info}));
     return {client,symbols};
   }catch(error){await client.close?.();throw error;}
 }
