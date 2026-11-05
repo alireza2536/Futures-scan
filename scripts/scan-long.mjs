@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { fetchOkxHistory, fetchMexcHistory, TIMEFRAMES } from "./market-data.mjs";
+import { fetchOkxHistory, fetchMexcHistory, TIMEFRAMES, assertCandleCoverage } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { evaluateEntryEligibility, MAX_ENTRY_PRICE_USD } from "./entry-filters.mjs";
 import { persistScanResults } from "./persist-neon.mjs";
@@ -72,10 +72,11 @@ function keepClosedCandles(bars,timeframe,now=Date.now()) {
 async function scanSymbolTimeframe(item,timeframe) {
   try {
     const raw=item.exchange==="OKX"
-      ? await fetchOkxHistory({base:item.base,instId:item.symbol,bar:TIMEFRAMES[timeframe].okx,count:CANDLE_COUNT})
-      : await fetchMexcHistory({symbol:item.symbol,interval:timeframe,count:CANDLE_COUNT});
-    const bars=keepClosedCandles(raw,timeframe);
+      ? await fetchOkxHistory({base:item.base,instId:item.symbol,bar:TIMEFRAMES[timeframe].okx,count:CANDLE_COUNT + 2})
+      : await fetchMexcHistory({symbol:item.symbol,interval:timeframe,count:CANDLE_COUNT + 2});
+    const bars=keepClosedCandles(raw,timeframe).slice(-CANDLE_COUNT);
     if(bars.length<CANDLE_COUNT) throw new Error(`insufficient closed candles ${bars.length}/${CANDLE_COUNT}`);
+    if(timeframe==="5m") assertCandleCoverage(bars,"5m",CANDLE_COUNT);
     const v=calculateLatestIndicators(bars,{emaLength:EMA_LENGTH,cciLength:CCI_LENGTH});
     if(![v.close,v.ema9,v.ema21,v.ema,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
     const ageMs=Date.now()-v.timestamp;
