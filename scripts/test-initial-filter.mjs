@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterInitialUniverse, initialEntryDecision, normalizeBaseAsset } from "./initial-filter.mjs";
+import { filterInitialUniverse, initialEntryDecision, normalizeBaseAsset, isUsdStablecoinBase } from "./initial-filter.mjs";
+
+test("USD stablecoins can be excluded before price requests", () => {
+  assert.equal(isUsdStablecoinBase("USDT"), true);
+  assert.equal(isUsdStablecoinBase("1000USDC"), true);
+  assert.equal(isUsdStablecoinBase("BTC"), false);
+});
 
 test("USD stablecoins are rejected before data retrieval", () => {
   for (const base of ["USDT", "USDC", "DAI", "USDE", "USD1", "PYUSD", "RLUSD", "FRAX", "CRVUSD", "USDC.E", "USDTB"]) {
