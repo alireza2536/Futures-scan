@@ -24,6 +24,10 @@ function priceDivisor(baseAsset, contractSymbol = "") {
   return 1;
 }
 
+export function isUsdStablecoinBase(value) {
+  return USD_STABLECOIN_BASES.has(normalizeBaseAsset(value));
+}
+
 export function normalizeBaseAsset(value) {
   let base = rawBaseAsset(value);
   for (const multiplier of ["1000000", "100000", "10000", "1000"]) {
