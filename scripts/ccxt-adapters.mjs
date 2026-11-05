@@ -73,12 +73,27 @@ async function fetchHtxHistory(symbol,timeframe,count){
     return bars.slice(-count);
   }
   const period={"5m":"5min","15m":"15min","1h":"60min","4h":"4hour","1d":"1day"}[timeframe];
-  const contractCode=symbol.includes("/")?symbol.split("/")[0]+"-"+symbol.split("/")[1].split(":")[0]:symbol;
-  const params=new URLSearchParams({contract_code:contractCode,period,size:String(Math.min(2000,count+2))});
-  const payload=await jsonRequest(`https://api.hbdm.com/linear-swap-ex/market/history/kline?${params}`);
-  if(payload.status!=="ok"||!Array.isArray(payload.data)) throw new Error(`HTX kline rejected: ${payload["err-msg"]??payload.status}`);
-  const bars=dedupeSort(payload.data.map(x=>normalizeBar(x.id,x.open,x.high,x.low,x.close,x.vol)));
-  if(bars.length<count) throw new Error(`HTX ${timeframe}: API returned ${bars.length}/${count} candles (max historical range/availability)`);
+  const intervalMs=TIMEFRAMES[timeframe].seconds*1000;
+  const collected=new Map();
+  let cursor=Math.floor((Date.now()-intervalMs*(count+4))/intervalMs)*intervalMs;
+  for(let page=0;page<8&&collected.size<count;page+=1){
+    const chunk=Math.min(1800,count-collected.size+4);
+    const end=cursor+intervalMs*(chunk-1);
+    const params=new URLSearchParams({contract_code:symbol,period});
+    if(count<=2000) params.set("size",String(count+2));
+    else {params.set("from",String(Math.floor(cursor/1000)));params.set("to",String(Math.floor(end/1000)));}
+    const payload=await jsonRequest(`https://api.hbdm.com/linear-swap-ex/market/history/kline?${params}`);
+    if(payload.status!=="ok"||!Array.isArray(payload.data)) throw new Error(`HTX kline rejected: ${payload["err-msg"]??payload.status}`);
+    const bars=dedupeSort(payload.data.map(x=>normalizeBar(x.id,x.open,x.high,x.low,x.close,x.vol)));
+    if(!bars.length) break;
+    for(const b of bars) collected.set(b.timestamp,b);
+    const newest=Math.max(...bars.map(b=>b.timestamp));
+    const next=newest+intervalMs;
+    if(next<=cursor) break;
+    cursor=next;
+  }
+  const bars=dedupeSort([...collected.values()]);
+  if(bars.length<count) throw new Error(`HTX ${timeframe}: API returned ${bars.length}/${count} candles (historical range/availability)`);
   return bars.slice(-count);
 }
 async function fetchKucoinHistory(client,symbol,timeframe,count){
