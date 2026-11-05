@@ -65,7 +65,8 @@ try{
       const invalid=markets.filter(x=>!x.symbol||!x.baseAsset||x.quote!=="USDT"||x.settle!=="USDT"||!x.active);
       const missingPrices=markets.filter(x=>!Number.isFinite(x.price)||x.price<=0);
       const eligible=markets.filter(x=>evaluateEntryEligibility({baseAsset:x.baseAsset,lastPrice:x.price}).eligible);
-      const rejected=markets.length-eligible.length;\n      const nonCrypto=markets.filter(x=>isNonCryptoBase(x.baseAsset));
+      const rejected=markets.length-eligible.length;
+      const nonCrypto=markets.filter(x=>isNonCryptoBase(x.baseAsset));
       const pass=markets.length>0&&duplicates===0&&invalid.length===0;
       const row={exchange:name,status:pass?(missingPrices.length?"PASS_WITH_MISSING_TICKERS_EXCLUDED":"PASS"):"FAIL",activeUsdtPerpetuals:markets.length,uniqueSymbols:unique.size,
         duplicateSymbols:duplicates,invalidContractMetadata:invalid.length,missingOrInvalidTickers:missingPrices.length,missingTickerExamples:missingPrices.slice(0,12).map(x=>x.symbol),
