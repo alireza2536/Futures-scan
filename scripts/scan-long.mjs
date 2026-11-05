@@ -10,7 +10,7 @@ const EMA_LENGTH = 500;
 const CCI_LENGTH = 1200;
 const SELECTED_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h", "1d"];
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
-const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC").split(",").map(v=>v.trim().toUpperCase()).filter(Boolean);
+const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC,BINGX,WEEX,HTX,KUCOIN,XT").split(",").map(v=>v.trim().toUpperCase()).filter(Boolean);
 const MAX_SYMBOLS = Number(process.env.MAX_SYMBOLS ?? 0);
 const SYMBOL_FILTER = (process.env.SYMBOLS ?? "").split(",").map(v=>v.trim()).filter(Boolean);
 const REQUIRE_DATA = process.env.REQUIRE_DATA === "true";
