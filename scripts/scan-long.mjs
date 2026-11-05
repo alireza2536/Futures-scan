@@ -1,10 +1,15 @@
 import { writeFile } from "node:fs/promises";
 import { fetchOkxHistory, fetchMexcHistory } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
-import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
+import {
+  isLongSetupForSelectedTimeframes, keepClosedCandles, LONG_RULE_LABELS
+} from "./strategy.mjs";
 import { filterInitialUniverse, isUsdStablecoinBase } from "./initial-filter.mjs";
 
-const CANDLE_COUNT = 2000;
+const CANDLE_COUNT_BY_TIMEFRAME = { "15m": 1200, "1h": 2000, "2h": 2000, "4h": 1200, "1d": 50 };
+const OKX_BAR_BY_TIMEFRAME = { "15m": "15m", "1h": "1H", "2h": "2H", "4h": "4H", "1d": "1D" };
+const SELECTED_TIMEFRAMES = [...new Set((process.env.TIMEFRAMES ?? "4h")
+  .split(",").map(value => value.trim().toLowerCase()).filter(Boolean))];
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC")
   .split(",").map(value => value.trim().toUpperCase()).filter(Boolean);
@@ -115,25 +120,73 @@ async function mapLimit(items, limit, worker) {
   return output;
 }
 
+async function fetchTimeframeHistory(item, timeframe) {
+  const count = CANDLE_COUNT_BY_TIMEFRAME[timeframe];
+  if (!count) throw new Error(`Unsupported selected timeframe: ${timeframe}`);
+  if (item.exchange === "OKX") {
+    return fetchOkxHistory({
+      base: item.base,
+      instId: item.symbol,
+      bar: OKX_BAR_BY_TIMEFRAME[timeframe],
+      count
+    });
+  }
+  return fetchMexcHistory({ symbol: item.symbol, interval: timeframe, count });
+}
+
+function indicatorOptionsForTimeframe(timeframe) {
+  if (timeframe === "4h") return { emaLengths: [500], cciLength: 1200 };
+  if (timeframe === "1h" || timeframe === "2h") return { emaLengths: [2000], cciLength: 1200 };
+  if (timeframe === "15m") return { emaLengths: [9, 21], cciLength: 1200, includeVWAP: true };
+  if (timeframe === "1d") return { emaLengths: [20, 50], cciLength: null };
+  throw new Error(`Unsupported selected timeframe: ${timeframe}`);
+}
+
+function mapTimeframeValues(timeframe, indicators) {
+  if (timeframe === "4h") return {
+    close: indicators.close, ema500: indicators.emas.ema500, cci1200: indicators.cci,
+    candleTime: indicators.timestamp, candleCount: indicators.candleCount
+  };
+  if (timeframe === "1h" || timeframe === "2h") return {
+    close: indicators.close, ema2000: indicators.emas.ema2000, cci1200: indicators.cci,
+    candleTime: indicators.timestamp, candleCount: indicators.candleCount
+  };
+  if (timeframe === "15m") return {
+    close: indicators.close, ema9: indicators.emas.ema9, ema21: indicators.emas.ema21,
+    vwap: indicators.vwap, cci1200: indicators.cci,
+    candleTime: indicators.timestamp, candleCount: indicators.candleCount
+  };
+  return {
+    close: indicators.close, ema20: indicators.emas.ema20, ema50: indicators.emas.ema50,
+    candleTime: indicators.timestamp, candleCount: indicators.candleCount
+  };
+}
+
 async function scanSymbol(item) {
   try {
-    const raw = item.exchange === "OKX"
-      ? await fetchOkxHistory({ base: item.base, instId: item.symbol, bar: "4H", count: CANDLE_COUNT })
-      : await fetchMexcHistory({ symbol: item.symbol, interval: "4h", count: CANDLE_COUNT });
-    const bars = keepClosedFourHourCandles(raw);
-    if (bars.length < 1201) {
-      throw new Error(`not enough closed candles: ${bars.length}/1201`);
+    const valuesByTimeframe = {};
+    for (const timeframe of SELECTED_TIMEFRAMES) {
+      const raw = await fetchTimeframeHistory(item, timeframe);
+      const bars = keepClosedCandles(raw, timeframe);
+      const required = CANDLE_COUNT_BY_TIMEFRAME[timeframe];
+      if (bars.length < required) {
+        throw new Error(`not enough closed ${timeframe} candles: ${bars.length}/${required}`);
+      }
+      const indicators = calculateLatestIndicators(bars, indicatorOptionsForTimeframe(timeframe));
+      valuesByTimeframe[timeframe] = mapTimeframeValues(timeframe, indicators);
     }
-    const values = calculateLatestIndicators(bars, { emaLength: 500, cciLength: 1200 });
-    const passed = isLongSetup({ close: values.close, ema500: values.ema, cci1200: values.cci });
+    const passed = isLongSetupForSelectedTimeframes(valuesByTimeframe, SELECTED_TIMEFRAMES);
     return {
       exchange: item.exchange,
       symbol: item.display,
       status: passed ? "LONG" : "NO_MATCH",
-      close: values.close,
-      ema500: values.ema,
-      cci1200: values.cci,
-      candleTime: new Date(values.timestamp).toISOString()
+      selectedTimeframes: SELECTED_TIMEFRAMES,
+      timeframes: Object.fromEntries(SELECTED_TIMEFRAMES.map(timeframe => [
+        timeframe,
+        { ...valuesByTimeframe[timeframe], passed: isLongSetupForSelectedTimeframes(
+          { [timeframe]: valuesByTimeframe[timeframe] }, [timeframe]
+        ) }
+      ]))
     };
   } catch (error) {
     return {
@@ -149,7 +202,11 @@ if (!Number.isInteger(CONCURRENCY) || CONCURRENCY < 1 || CONCURRENCY > 10) {
   throw new Error("CONCURRENCY must be an integer from 1 to 10");
 }
 if (EXCHANGES.some(exchange => !["OKX", "MEXC"].includes(exchange))) {
-  throw new Error("Supported exchanges in this stage: OKX, MEXC");
+  throw new Error("Supported scan adapters in this stage: OKX, MEXC");
+}
+const validTimeframes = new Set(Object.keys(CANDLE_COUNT_BY_TIMEFRAME));
+if (SELECTED_TIMEFRAMES.length === 0 || SELECTED_TIMEFRAMES.some(timeframe => !validTimeframes.has(timeframe))) {
+  throw new Error("TIMEFRAMES must contain one or more of: 15m,1h,2h,4h,1d");
 }
 
 const symbolLists = await Promise.all(EXCHANGES.map(async exchange => {
@@ -196,7 +253,9 @@ const matches = results.filter(item => item.status === "LONG");
 const errors = results.filter(item => item.status === "DATA_ERROR");
 const summary = {
   generatedAt: new Date().toISOString(),
-  rule: "4h close > EMA500 AND CCI(1200) > 100",
+  direction: "LONG",
+  selectedTimeframes: SELECTED_TIMEFRAMES,
+  rule: SELECTED_TIMEFRAMES.map(timeframe => LONG_RULE_LABELS[timeframe]).join(" AND "),
   exchanges: EXCHANGES,
   scanned: results.length,
   longMatches: matches.length,
