@@ -83,3 +83,5 @@ npm run test:5m:live
 ```
 
 The live check needs outbound access to both exchange APIs. A PASS means that exchange returned 1,201 closed, continuous 5m candles and the indicator calculations returned finite values at the time of the test; it does not certify the other five candidate exchanges.
+
+- The seven-candidate exchange validation workflow also checks 5m history for MEXC, BingX, OKX, WEEX, HTX, KuCoin Futures, and XT: 1,201 closed candles, UTC alignment, no gaps, freshness, and finite EMA9/EMA21/EMA500/CCI1200/VWAP outputs. A venue is not marked passed unless its 5m core check succeeds.
