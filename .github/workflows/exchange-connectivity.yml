@@ -46,5 +46,6 @@ jobs:
           EXCHANGES: OKX,MEXC
           SYMBOLS: XRP-USDT-SWAP,XRP_USDT
           CONCURRENCY: "1"
+          TIMEFRAMES: "15m,1h,2h,4h,1d"
           REQUIRE_DATA: "true"
         run: node scripts/scan-long.mjs
