@@ -19,3 +19,5 @@ jobs:
       - run: npm test
       - name: Live 5m API and indicator coverage for OKX and MEXC
         run: npm run test:5m:live
+      - name: Live API and indicator validation across all seven exchanges and six timeframes
+        run: npm run test:exchanges:live
