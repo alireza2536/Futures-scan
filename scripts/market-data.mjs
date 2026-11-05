@@ -71,10 +71,10 @@ function mexcRowsToBars(data) {
 export const TIMEFRAMES = Object.freeze({
   "5m": { okx:"5m", mexc:"Min5", seconds:300 },
   "15m": { okx:"15m", mexc:"Min15", seconds:900 },
-  "1h": { okx:"1H", mexc:"Hour1", seconds:3600 },
+  "1h": { okx:"1H", mexc:"Min60", seconds:3600 },
   "2h": { okx:"2H", mexc:"Hour2", seconds:7200 },
   "4h": { okx:"4H", mexc:"Hour4", seconds:14400 },
-  "1d": { okx:"1D", mexc:"Day1", seconds:86400 }
+  "1d": { okx:"1Dutc", mexc:"Day1", seconds:86400 }
 });
 export async function fetchMexcHistory({base="https://api.mexc.com",symbol="BTC_USDT",interval="4h",count=1201}={}) {
   const spec=TIMEFRAMES[interval];
@@ -87,6 +87,26 @@ export async function fetchMexcHistory({base="https://api.mexc.com",symbol="BTC_
   const bars=dedupeAndSort(mexcRowsToBars(payload.data));
   if (bars.length<count) throw new Error(`MEXC returned only ${bars.length}/${count} unique valid ${interval} bars for ${symbol}`);
   return bars.slice(-count);
+}
+
+
+export function aggregateHourlyTo2h(hourly) {
+  const sorted=dedupeAndSort(hourly);
+  const groups=new Map();
+  for(const bar of sorted){
+    const start=Math.floor(bar.timestamp/7200000)*7200000;
+    const list=groups.get(start)??[];
+    list.push(bar);groups.set(start,list);
+  }
+  const result=[];
+  for(const [timestamp,items] of [...groups.entries()].sort((a,b)=>a[0]-b[0])){
+    items.sort((a,b)=>a.timestamp-b.timestamp);
+    if(items.length!==2||items[0].timestamp!==timestamp||items[1].timestamp!==timestamp+3600000) continue;
+    result.push({timestamp,open:items[0].open,high:Math.max(...items.map(x=>x.high)),
+      low:Math.min(...items.map(x=>x.low)),close:items[1].close,
+      volume:items.reduce((sum,x)=>sum+x.volume,0),confirmed:items.every(x=>x.confirmed===true)?true:null});
+  }
+  return result;
 }
 
 // Verifies that a selected timeframe has the full, uninterrupted candle history
