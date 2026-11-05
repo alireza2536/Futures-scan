@@ -10,7 +10,8 @@
     "scan": "node scripts/scan-long.mjs",
     "test:5m:live": "node scripts/test-5m-live.mjs",
     "test:exchanges:live": "node scripts/test-seven-exchanges-live.mjs",
-    "test:universe:live": "node scripts/test-seven-exchange-universe.mjs"
+    "test:universe:live": "node scripts/test-seven-exchange-universe.mjs",
+    "test:history:universe": "node scripts/test-seven-exchange-history-universe.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
