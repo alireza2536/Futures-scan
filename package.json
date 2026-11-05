@@ -5,7 +5,8 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "test": "node --test scripts/test-*.mjs",
-    "scan": "node scripts/scan-long.mjs"
+    "scan": "node scripts/scan-long.mjs",
+    "test:5m:live": "node scripts/test-5m-live.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2"
