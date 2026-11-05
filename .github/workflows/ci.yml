@@ -21,3 +21,5 @@ jobs:
         run: npm run test:5m:live
       - name: Live API and indicator validation across all seven exchanges and six timeframes
         run: npm run test:exchanges:live
+      - name: Live full USDT perpetual market and ticker audit across all seven exchanges
+        run: npm run test:universe:live
