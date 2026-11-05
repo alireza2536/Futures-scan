@@ -43,6 +43,14 @@ jobs:
           path: final-seven-exchange-api-report.json
           if-no-files-found: ignore
           retention-days: 14
+      - name: Upload live scanner smoke-test results
+        if: always() && hashFiles('scan-results.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-scanner-smoke-test
+          path: scan-results.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Smoke-test live scanner on price-eligible XRP perpetuals
         env:
           EXCHANGES: OKX,MEXC
