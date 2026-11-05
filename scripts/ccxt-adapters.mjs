@@ -38,11 +38,11 @@ function dedupeSort(rows){
   return [...map.values()].sort((a,b)=>a.timestamp-b.timestamp);
 }
 async function fetchBingxHistory(symbol,timeframe,count){
-  const interval=TIMEFRAMES[timeframe].seconds;
+  const intervalMs=TIMEFRAMES[timeframe].seconds*1000;
   const pair=symbol.includes("/")?symbol.split("/")[0]+"-"+symbol.split("/")[1].split(":")[0]:symbol;
   const params=new URLSearchParams({
-    symbol:pair,interval,
-    startTime:String(Date.now()-interval*1000*(count+4)),
+    symbol:pair,interval:timeframe,
+    startTime:String(Date.now()-intervalMs*(count+4)),
     endTime:String(Date.now()),
     limit:String(Math.min(1440,count+4)),timeZone:"0"
   });
