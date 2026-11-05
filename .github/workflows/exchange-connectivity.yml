@@ -29,7 +29,7 @@ jobs:
         run: node --test scripts/test-strategy.mjs
       - name: Install CCXT adapters for final seven exchanges
         run: npm install --no-save --no-package-lock ccxt
-      - name: Test final seven exchanges across all five timeframes
+      - name: Test final seven exchanges across all six timeframes, including 5m
         run: node scripts/check-final-seven-exchanges.mjs
       - name: Upload final seven-exchange API report
         if: always() && hashFiles('final-seven-exchange-api-report.json') != ''
