@@ -9,7 +9,7 @@ test("USD stablecoins can be excluded before price requests", () => {
 });
 
 test("USD stablecoins are rejected before data retrieval", () => {
-  for (const base of ["USDT", "USDC", "DAI", "USDE", "USD1", "PYUSD", "RLUSD", "FRAX", "CRVUSD", "USDC.E", "USDTB"]) {
+  for (const base of ["USDT", "USDC", "DAI", "USDE", "USD1", "PYUSD", "RLUSD", "FRAX", "CRVUSD", "USDC.E", "USDTB", "AUSD", "USDY", "USYC"]) {
     assert.equal(initialEntryDecision(base, 1).reason, "USD_STABLECOIN", base);
   }
 });
