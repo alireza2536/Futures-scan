@@ -85,7 +85,7 @@ async function fetchWeexHistory(symbol,timeframe,count){
 }
 async function fetchHtxHistory(symbol,timeframe,count){
   if(timeframe==="1d"){
-    const hourly=await fetchHtxHistory(symbol,"1h",count*24+4);
+    const hourly=await fetchHtxHistory(symbol,"1h",count*24+72);
     const bars=aggregateHourlyTo1d(hourly);
     if(bars.length<count) throw new Error("HTX UTC 1d aggregation: "+bars.length+"/"+count+" complete daily candles from hourly history");
     return bars.slice(-count);
