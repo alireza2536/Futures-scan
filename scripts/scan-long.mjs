@@ -153,7 +153,10 @@ if (EXCHANGES.some(exchange => !["OKX", "MEXC"].includes(exchange))) {
 }
 
 const symbolLists = await Promise.all(EXCHANGES.map(async exchange => {
-  const symbols = exchange === "OKX" ? await getOkxSymbols() : await getMexcSymbols();
+  const allSymbols = exchange === "OKX" ? await getOkxSymbols() : await getMexcSymbols();
+  const symbols = SYMBOL_FILTER.length > 0
+    ? allSymbols.filter(item => SYMBOL_FILTER.includes(item.symbol))
+    : allSymbols;
   // Reject stablecoins from contract metadata before making any price request.
   const nonStablecoinSymbols = symbols.filter(item => !isUsdStablecoinBase(item.baseAsset));
   const tickers = new Map();
