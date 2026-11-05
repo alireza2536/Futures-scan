@@ -13,7 +13,7 @@ export const STABLECOIN_BASES = new Set([
 export const NON_CRYPTO_BASES = new Set([
   // Precious metals and commodities
   "XAU", "XAG", "XPT", "XPD", "USOIL", "UKOIL", "WTI", "BRENT",
-  "NATGAS", "GAS", "COPPER", "WHEAT", "CORN", "SOYBEAN", "TUNGSTEN",
+  "NATGAS", "COPPER", "WHEAT", "CORN", "SOYBEAN", "TUNGSTEN",
   // Equity / tokenized-stock underlyings observed in the exchange catalogs
   "ANTHROPIC", "APPSTOCK", "NIO", "LUXSHARE", "SINOCERA", "CCTC",
   // Major equity-index contracts
@@ -35,7 +35,8 @@ export function isNonCryptoBase(value) {
   if (NON_CRYPTO_BASES.has(base)) return true;
   // Exchange-specific synthetic market identifiers for indices and FX.
   if (/^(?:NCS|NCFX|NCCO|NCCX)[A-Z0-9]+$/.test(base)) return true;
-  if (/^(?:[A-Z]{3})[A-Z]{3}$/.test(base) && /(?:USD|EUR|JPY|GBP|CHF|AUD|CAD|CNY|INR|TWD)$/.test(base)) return true;
+  const fiatCodes = new Set(["USD","EUR","JPY","GBP","CHF","AUD","CAD","CNY","INR","TWD","HKD","SGD","NZD","KRW","TRY","RUB","BRL","MXN","ZAR","SEK","NOK","DKK","PLN","CZK","HUF","ILS","AED","SAR","THB","IDR","MYR","PHP","VND","PKR","BDT","KWD","QAR","EGP","ARS","CLP","COP"]);
+  if (/^[A-Z]{6}$/.test(base) && fiatCodes.has(base.slice(0,3)) && fiatCodes.has(base.slice(3,6))) return true;
   return false;
 }
 
