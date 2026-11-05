@@ -42,7 +42,7 @@ jobs:
       - name: Smoke-test live scanner on BTC perpetuals
         env:
           EXCHANGES: OKX,MEXC
-          SYMBOLS: BTC-USDT-SWAP,BTC_USDT
+          SYMBOLS: XRP-USDT-SWAP,XRP_USDT
           CONCURRENCY: "1"
           REQUIRE_DATA: "true"
         run: node scripts/scan-long.mjs
