@@ -11,8 +11,8 @@ const EXCHANGES = [
   { label: "KuCoin", id: "kucoinfutures" },
   { label: "XT", id: "xt" }
 ];
-const MS = { "15m": 900000, "1h": 3600000, "2h": 7200000, "4h": 14400000, "1d": 86400000 };
-const NEED = { "15m": 1200, "1h": 4000, "2h": 2000, "4h": 1200, "1d": 50 };
+const MS = { "5m": 300000, "15m": 900000, "1h": 3600000, "2h": 7200000, "4h": 14400000, "1d": 86400000 };
+const NEED = { "5m": 1201, "15m": 1200, "1h": 4000, "2h": 2000, "4h": 1200, "1d": 50 };
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -144,7 +144,7 @@ async function fetchWeex1hHistory(market, required) {
   return {bars,pages,complete:bars.length>=required,fresh:latest>=freshnessFloor,latest};
 }
 async function fetchHtxHistory(contractCode, timeframe, required) {
-  const periods = { "15m": "15min", "1h": "60min", "2h": "2hour", "4h": "4hour", "1d": "1day" };
+  const periods = { "5m": "5min", "15m": "15min", "1h": "60min", "2h": "2hour", "4h": "4hour", "1d": "1day" };
   const duration = MS[timeframe] / 1000;
   const target = required + 8;
   const now = Math.floor(Date.now()/1000);
@@ -240,6 +240,31 @@ async function checkExchange(config) {
     const tickerOk = ticker && Number.isFinite(Number(ticker.last));
     addCheck(result, "BTC perpetual ticker", tickerOk, tickerOk ? `${btc.symbol}; last=${ticker.last}` : "Ticker has no valid last price", true);
     if (!tickerOk) throw new Error("BTC perpetual ticker has no valid last price");
+
+    try {
+      const fiveMinute = await fetchVenueHistory(config, exchange, btc, "5m", NEED["5m"]);
+      const bars = fiveMinute.bars;
+      if (!fiveMinute.complete || !fiveMinute.fresh || bars.length < NEED["5m"]) {
+        throw new Error(`incomplete or stale 5m history: ${bars.length}/${NEED["5m"]}`);
+      }
+      for (let i=0;i<bars.length;i+=1) {
+        if (bars[i].timestamp % MS["5m"] !== 0) throw new Error(`5m candle timestamp is not UTC interval-aligned at index ${i}`);
+        if (i>0 && bars[i].timestamp-bars[i-1].timestamp !== MS["5m"]) throw new Error(`5m candle gap/overlap at index ${i}`);
+      }
+      const values = calculateLatestIndicators(bars, { emaLength: 500, cciLength: 1200 });
+      for (const key of ["ema9","ema21","ema","cci","vwap"]) {
+        if (!Number.isFinite(values[key])) throw new Error(`5m ${key} calculation is not finite`);
+      }
+      result.history["5m"] = { candles: bars.length, required: NEED["5m"], pages: fiveMinute.pages, latest: new Date(fiveMinute.latest).toISOString(), fresh: fiveMinute.fresh, continuous: true, closedOnly: true };
+      result.indicators.ema9_5m = values.ema9;
+      result.indicators.ema21_5m = values.ema21;
+      result.indicators.ema500_5m = values.ema;
+      result.indicators.cci1200_5m = values.cci;
+      result.indicators.vwap5m_utc_session = values.vwap;
+      addCheck(result, "5m history + EMA9 + EMA21 + EMA500 + CCI1200 + VWAP", true, `${bars.length} closed consecutive candles / ${fiveMinute.pages} pages; EMA9=${values.ema9}; EMA21=${values.ema21}; EMA500=${values.ema}; CCI1200=${values.cci}; VWAP=${values.vwap}; latest=${new Date(fiveMinute.latest).toISOString()}`, true);
+    } catch (error) {
+      addCheck(result, "5m history + EMA9 + EMA21 + EMA500 + CCI1200 + VWAP", false, error.message, true);
+    }
 
     let oneHour = null;
     try {
@@ -352,7 +377,7 @@ async function checkExchange(config) {
 
     const coreChecks = result.checks.filter(x=>x.core);
     const optionalChecks = result.checks.filter(x=>!x.core);
-    result.coreStatus = coreChecks.length===4 && coreChecks.every(x=>x.status==="PASS") ? "PASS" : "FAIL";
+    result.coreStatus = coreChecks.length===5 && coreChecks.every(x=>x.status==="PASS") ? "PASS" : "FAIL";
     result.optionalStatus = optionalChecks.length===3 && optionalChecks.every(x=>x.status==="PASS") ? "PASS" : "PARTIAL";
     result.status = result.coreStatus;
     if (exchange.has?.fetchOpenInterest) {
