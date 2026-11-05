@@ -23,3 +23,34 @@ jobs:
         run: npm run test:exchanges:live
       - name: Live full USDT perpetual market and ticker audit across all seven exchanges
         run: npm run test:universe:live
+
+  history-universe:
+    name: History coverage — ${{ matrix.exchange }}
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 7
+      matrix:
+        exchange: [OKX, MEXC, BINGX, WEEX, HTX, KUCOIN, XT]
+    env:
+      EXCHANGE: ${{ matrix.exchange }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Fetch 1201 closed candles and validate indicators for every eligible symbol
+        run: npm run test:history:universe
+      - name: Upload per-symbol history results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: history-universe-${{ matrix.exchange }}
+          path: |
+            history-universe-${{ matrix.exchange }}.jsonl
+            history-universe-${{ matrix.exchange }}-summary.json
+          if-no-files-found: warn
+          retention-days: 30
