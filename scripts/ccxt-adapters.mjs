@@ -5,6 +5,7 @@ const EXCHANGE_IDS = Object.freeze({
   BINGX: "bingx", WEEX: "weex", HTX: "htx", KUCOIN: "kucoinfutures", XT: "xt"
 });
 const TF = Object.freeze({ "5m":"5m", "15m":"15m", "1h":"1h", "2h":"2h", "4h":"4h", "1d":"1d" });
+const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 export function supportedCcxtExchanges() { return Object.keys(EXCHANGE_IDS); }
 
 async function jsonRequest(url, timeoutMs=25000) {
@@ -46,15 +47,20 @@ async function fetchBingxHistory(symbol,timeframe,count){
     endTime:String(Date.now()),
     limit:String(Math.min(1440,count+4)),timeZone:"0"
   });
-  const payload=await jsonRequest("https://open-api.bingx.com/openApi/swap/v3/quote/klines?"+params);
-  if(![0,"0"].includes(payload.code)||!Array.isArray(payload.data)){
+  const url="https://open-api.bingx.com/openApi/swap/v3/quote/klines?"+params;
+  let payload;
+  for(let attempt=0;attempt<5;attempt+=1){
+    payload=await jsonRequest(url);
+    if([0,"0"].includes(payload.code)) break;
+    if(String(payload.code)==="100410"&&attempt<4){await sleep(2500*(attempt+1));continue;}
     throw new Error("BingX kline rejected: "+payload.code+" "+(payload.msg??""));
   }
-  const bars=dedupeSort(payload.data.map(row=>normalizeBar(row[0],row[1],row[2],row[3],row[4],row[5])));
+  await sleep(1200);
+  if(!Array.isArray(payload.data)) throw new Error("BingX kline data is not an array");
+  const bars=dedupeSort(payload.data.map(row=>normalizeBar(row.time,row.open,row.high,row.low,row.close,row.volume)));
   if(bars.length<count) throw new Error("BingX "+timeframe+": received "+bars.length+"/"+count+" valid candles");
   return bars.slice(-count);
 }
-
 async function fetchWeexHistory(symbol,timeframe,count){
   if(timeframe==="2h"){
     const hourly=await fetchWeexHistory(symbol,"1h",count*2+4);
