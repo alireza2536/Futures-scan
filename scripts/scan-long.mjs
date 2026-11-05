@@ -3,6 +3,7 @@ import { fetchOkxHistory, fetchMexcHistory, TIMEFRAMES, assertCandleCoverage } f
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { evaluateEntryEligibility, MAX_ENTRY_PRICE_USD } from "./entry-filters.mjs";
 import { persistScanResults } from "./persist-neon.mjs";
+import { createCcxtAdapter, fetchCcxtHistory, supportedCcxtExchanges } from "./ccxt-adapters.mjs";
 
 const CANDLE_COUNT = 1201;
 const EMA_LENGTH = 500;
@@ -71,12 +72,14 @@ function keepClosedCandles(bars,timeframe,now=Date.now()) {
 }
 async function scanSymbolTimeframe(item,timeframe) {
   try {
-    const raw=item.exchange==="OKX"
-      ? await fetchOkxHistory({base:item.base,instId:item.symbol,bar:TIMEFRAMES[timeframe].okx,count:CANDLE_COUNT + 2})
-      : await fetchMexcHistory({symbol:item.symbol,interval:timeframe,count:CANDLE_COUNT + 2});
+    const raw=["OKX","MEXC"].includes(item.exchange)
+      ? item.exchange==="OKX"
+        ? await fetchOkxHistory({base:item.base,instId:item.symbol,bar:TIMEFRAMES[timeframe].okx,count:CANDLE_COUNT + 2})
+        : await fetchMexcHistory({symbol:item.symbol,interval:timeframe,count:CANDLE_COUNT + 2})
+      : await fetchCcxtHistory({client:item.client,symbol:item.symbol,timeframe,count:CANDLE_COUNT + 2});
     const bars=keepClosedCandles(raw,timeframe).slice(-CANDLE_COUNT);
     if(bars.length<CANDLE_COUNT) throw new Error(`insufficient closed candles ${bars.length}/${CANDLE_COUNT}`);
-    if(timeframe==="5m") assertCandleCoverage(bars,"5m",CANDLE_COUNT);
+    assertCandleCoverage(bars,timeframe,CANDLE_COUNT);
     const v=calculateLatestIndicators(bars,{emaLength:EMA_LENGTH,cciLength:CCI_LENGTH});
     if(![v.close,v.ema9,v.ema21,v.ema,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
     const ageMs=Date.now()-v.timestamp;
@@ -92,22 +95,29 @@ async function scanSymbol(item) {
     status:ready===SELECTED_TIMEFRAMES.length?"DATA_READY":ready>0?"PARTIAL_DATA":"DATA_ERROR",timeframes};
 }
 if(!Number.isInteger(CONCURRENCY)||CONCURRENCY<1||CONCURRENCY>10) throw new Error("CONCURRENCY must be an integer from 1 to 10");
-if(EXCHANGES.some(x=>!["OKX","MEXC"].includes(x))) throw new Error("Implemented exchanges currently: OKX, MEXC; other candidate adapters remain unimplemented");
+const supportedExchanges=["OKX","MEXC",...supportedCcxtExchanges()];
+if(EXCHANGES.some(x=>!supportedExchanges.includes(x))) throw new Error("Unsupported exchange. Supported: "+supportedExchanges.join(", "));
 if(!Number.isInteger(MAX_SYMBOLS)||MAX_SYMBOLS<0) throw new Error("MAX_SYMBOLS must be 0 (unlimited) or a positive integer");
 
+const liveAdapters=new Map();
 const exchangeInputs=await Promise.all(EXCHANGES.map(async exchange=>{
   if(exchange==="OKX") {
     let lastError;
     for(const base of ["https://eea.okx.com","https://openapi.okx.com"]) {
-      try {const [symbols,prices]=await Promise.all([getOkxSymbols(base),getOkxPrices(base)]);return {symbols,prices};}
+      try {const [symbols,prices]=await Promise.all([getOkxSymbols(base),getOkxPrices(base)]);return {symbols:symbols.map(x=>({...x,lastPriceUsd:prices.get(x.symbol)}))};}
       catch(error){lastError=error;}
     }
     throw lastError??new Error("OKX instruments/tickers unavailable");
   }
-  const [symbols,prices]=await Promise.all([getMexcSymbols(),getMexcPrices()]);
-  return {symbols,prices};
+  if(exchange==="MEXC") {
+    const [symbols,prices]=await Promise.all([getMexcSymbols(),getMexcPrices()]);
+    return {symbols:symbols.map(x=>({...x,lastPriceUsd:prices.get(x.symbol)}))};
+  }
+  const adapter=await createCcxtAdapter(exchange);
+  liveAdapters.set(exchange,adapter.client);
+  return {symbols:adapter.symbols.map(x=>({...x,client:adapter.client}))};
 }));
-const candidates=exchangeInputs.flatMap(({symbols,prices})=>symbols.map(x=>({...x,lastPriceUsd:prices.get(x.symbol)})));
+const candidates=exchangeInputs.flatMap(({symbols})=>symbols);
 const selected=SYMBOL_FILTER.length?candidates.filter(x=>SYMBOL_FILTER.includes(x.symbol)):candidates;
 const rejected=[],eligible=[];
 for(const item of selected) {
@@ -135,6 +145,7 @@ const summary={generatedAt:new Date().toISOString(),purpose:"Market data and ind
   rejected,results};
 await writeFile("scan-results.json",JSON.stringify(summary,null,2));
 const persistence=await persistScanResults(summary);
+await Promise.all([...liveAdapters.values()].map(client=>client.close?.()));
 console.log(`PERSISTENCE | ${persistence.status}`);
 console.log(`SUMMARY | scanned=${results.length} | full=${summary.dataReady} | partial=${summary.partialData} | failed=${summary.dataErrors}`);
 if(REQUIRE_DATA&&summary.dataErrors+summary.partialData>0) process.exitCode=1;
