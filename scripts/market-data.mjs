@@ -61,7 +61,7 @@ export async function fetchOkxHistory({
   const collected = [];
   let cursor = null;
   let page = 0;
-  while (collected.length < count && page < 20) {
+  while (collected.length < count && page < 30) {
     const params = new URLSearchParams({ instId, bar, limit: "100" });
     if (cursor !== null) params.set("after", String(cursor));
     const endpoint = page === 0
@@ -115,21 +115,33 @@ export async function fetchMexcHistory({
 } = {}) {
   const spec = MEXC_INTERVALS[interval];
   if (!spec) throw new Error(`Unsupported MEXC interval: ${interval}`);
-  if (!Number.isInteger(count) || count < 2 || count > 2000) {
-    throw new Error("MEXC count must be an integer from 2 to 2000");
+  if (!Number.isInteger(count) || count < 2 || count > 5000) {
+    throw new Error("MEXC count must be an integer from 2 to 5000");
   }
-  const end = Math.floor(Date.now() / 1000);
-  const start = end - spec.seconds * (count + 10);
-  const params = new URLSearchParams({
-    interval: spec.api,
-    start: String(start),
-    end: String(end)
-  });
-  const payload = await requestJson(`${base}/api/v1/contract/kline/${encodeURIComponent(symbol)}?${params}`);
-  if (payload.success !== true) {
-    throw new Error(`MEXC kline rejected: code=${payload.code ?? "missing"} ${payload.message ?? ""}`);
+  let end = Math.floor(Date.now() / 1000);
+  const collected = [];
+  let page = 0;
+  while (collected.length < count && page < 10) {
+    const pageCount = Math.min(2000, count - collected.length);
+    const start = end - spec.seconds * (pageCount + 10);
+    const params = new URLSearchParams({
+      interval: spec.api,
+      start: String(start),
+      end: String(end)
+    });
+    const payload = await requestJson(`${base}/api/v1/contract/kline/${encodeURIComponent(symbol)}?${params}`);
+    if (payload.success !== true) {
+      throw new Error(`MEXC kline rejected: code=${payload.code ?? "missing"} ${payload.message ?? ""}`);
+    }
+    const pageBars = dedupeAndSort(mexcRowsToBars(payload.data));
+    if (pageBars.length === 0) break;
+    collected.push(...pageBars);
+    const oldest = Math.min(...pageBars.map(bar => bar.timestamp));
+    if (!Number.isFinite(oldest) || oldest >= end * 1000) break;
+    end = Math.floor(oldest / 1000) - 1;
+    page += 1;
   }
-  const bars = dedupeAndSort(mexcRowsToBars(payload.data));
+  const bars = dedupeAndSort(collected);
   if (bars.length < count) {
     throw new Error(`MEXC returned only ${bars.length}/${count} unique valid ${interval} bars for ${symbol}`);
   }

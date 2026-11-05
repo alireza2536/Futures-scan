@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateCCI, calculateEMA, calculateLatestIndicators } from "./indicators.mjs";
+import { calculateCCI, calculateEMA, calculateLatestIndicators, calculateSessionVWAP } from "./indicators.mjs";
 
 test("EMA matches TradingView ta.ema first-value seed and recursion", () => {
   assert.deepEqual(calculateEMA([1, 2, 3, 4, 5], 3), [1, 1.5, 2.25, 3.125, 4.0625]);
@@ -31,4 +31,25 @@ test("latest indicator calculation requires the requested history", () => {
   assert.ok(Number.isFinite(result.ema));
   assert.ok(Number.isFinite(result.cci));
   assert.throws(() => calculateLatestIndicators(bars.slice(0, 1199)), /At least 1200/);
+});
+
+test("calculateLatestIndicators supports multiple EMA lengths and optional CCI", () => {
+  const bars = Array.from({ length: 50 }, (_, index) => ({
+    timestamp: Date.UTC(2026, 0, 1) + index * 86400000,
+    open: index + 1, high: index + 2, low: index, close: index + 1.5, volume: 10
+  }));
+  const result = calculateLatestIndicators(bars, { emaLengths: [20, 50], cciLength: null });
+  assert.equal(Number.isFinite(result.emas.ema20), true);
+  assert.equal(Number.isFinite(result.emas.ema50), true);
+  assert.equal(result.cci, null);
+});
+
+test("session VWAP uses the last UTC session only", () => {
+  const day = Date.UTC(2026, 0, 2);
+  const bars = [
+    { timestamp: day - 60000, high: 11, low: 9, close: 10, volume: 100 },
+    { timestamp: day, high: 21, low: 19, close: 20, volume: 1 },
+    { timestamp: day + 60000, high: 31, low: 29, close: 30, volume: 1 }
+  ];
+  assert.equal(calculateSessionVWAP(bars), 25);
 });

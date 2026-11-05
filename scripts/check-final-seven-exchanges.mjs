@@ -37,6 +37,29 @@ function toBars(rows, timeframe) {
   }
   return [...byTime.values()].sort((a,b) => a.timestamp-b.timestamp);
 }
+async function fetchOhlcvWithRetry(exchange, symbol, timeframe, since, limit) {
+  const retryableTypes = [
+    ccxt.RateLimitExceeded, ccxt.NetworkError, ccxt.ExchangeNotAvailable,
+    ccxt.RequestTimeout, ccxt.DDoSProtection
+  ].filter(Boolean);
+  let lastError;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || error);
+      const retryable = retryableTypes.some(Type => error instanceof Type) ||
+        /100410|请稍后重试|try again|temporarily unavailable|rate.?limit|HTTP 429|HTTP 5\d\d/i.test(message);
+      if (!retryable || attempt === 4) throw error;
+      const delay = Math.min(1000 * (2 ** (attempt + 1)), 10000);
+      console.warn(`RETRY | ${exchange.id} ${symbol} ${timeframe} | attempt=${attempt + 1}/4 | wait=${delay}ms | ${message.slice(0, 160)}`);
+      await sleep(delay);
+    }
+  }
+  throw lastError ?? new Error("OHLCV request failed");
+}
+
 async function fetchHistory(exchange, symbol, timeframe, required) {
   if (!exchange.timeframes?.[timeframe]) throw new Error(`Timeframe ${timeframe} not supported by CCXT adapter`);
   const duration = MS[timeframe];
@@ -48,7 +71,7 @@ async function fetchHistory(exchange, symbol, timeframe, required) {
     const before = collected.size;
     const remaining = target - collected.size;
     const limit = Math.min(1000, Math.max(100, remaining + 10));
-    const rows = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+    const rows = await fetchOhlcvWithRetry(exchange, symbol, timeframe, since, limit);
     if (!Array.isArray(rows) || rows.length === 0) break;
     for (const bar of toBars(rows, timeframe)) collected.set(bar.timestamp, bar);
     const timestamps = rows.map(row => Number(row?.[0])).filter(Number.isFinite);
@@ -58,7 +81,8 @@ async function fetchHistory(exchange, symbol, timeframe, required) {
     pages += 1;
     await sleep(Math.max(100, Number(exchange.rateLimit) || 100));
   }
-  const bars = [...collected.values()].sort((a,b) => a.timestamp-b.timestamp).slice(-required);
+  // Keep the extra history margin: the 2h fallback needs complete aligned pairs of 1h candles.
+  const bars = [...collected.values()].sort((a,b) => a.timestamp-b.timestamp).slice(-target);
   if (bars.length === 0) throw new Error(`No closed valid ${timeframe} candles returned after ${pages} pages`);
   const latest = bars.at(-1);
   const freshnessFloor = Math.floor(Date.now()/duration)*duration - duration*2;
@@ -137,7 +161,8 @@ async function fetchWeex1hHistory(market, required) {
     if(byTime.size===before) break;
     await sleep(300);
   }
-  const bars=[...byTime.values()].sort((a,b)=>a.timestamp-b.timestamp).slice(-required);
+  // Keep the extra history margin so 1h data can form the full required 2h series.
+  const bars=[...byTime.values()].sort((a,b)=>a.timestamp-b.timestamp).slice(-target);
   if(!bars.length) throw new Error("WEEX direct history API returned no valid 1h candles");
   const latest=bars.at(-1).timestamp;
   const freshnessFloor=Math.floor(Date.now()/duration)*duration-2*duration;
@@ -217,7 +242,7 @@ function addCheck(result, name, ok, detail, core=false) {
   result.checks.push({ test: name, status: ok ? "PASS" : "FAIL", core, detail });
 }
 async function checkExchange(config) {
-  const result = { exchange: config.label, ccxt: config.id, status: "FAIL", coreStatus: "FAIL", optionalStatus: "PARTIAL", checks: [], history: {}, indicators: {} };
+  const result = { exchange: config.label, ccxt: config.id, status: "FAIL", coreStatus: "FAIL", checks: [], history: {}, indicators: {} };
   if (!ccxt.exchanges.includes(config.id)) {
     addCheck(result, "CCXT adapter", false, "Adapter missing from installed CCXT", true);
     return result;
@@ -248,15 +273,13 @@ async function checkExchange(config) {
       const ema2000 = oneHour.complete ? calculateEMA(oneHour.bars.map(x=>x.close), 2000).at(-1) : null;
       const close1h = oneHour.bars.at(-1)?.close;
       const fresh = oneHour.complete && oneHour.fresh && Number.isFinite(cci1h) && Number.isFinite(ema2000);
-      const rulePass = Number.isFinite(close1h) && close1h > ema2000 && cci1h > 100;
       result.history["1h"] = { candles: oneHour.bars.length, required: NEED["1h"], complete: oneHour.complete, pages: oneHour.pages, latest: new Date(oneHour.latest).toISOString(), fresh: oneHour.fresh };
       result.indicators.cci1200_1h = cci1h;
       result.indicators.ema2000_1h = ema2000;
-      result.ruleChecks = { ...(result.ruleChecks ?? {}), long1h: rulePass };
       addCheck(result, "1h history + CCI1200 + EMA2000", fresh,
-        `${oneHour.bars.length} closed candles / ${oneHour.pages} pages; EMA2000=${ema2000}; CCI1200=${cci1h}; longConditionNow=${rulePass}; latest=${new Date(oneHour.latest).toISOString()}`);
+        `${oneHour.bars.length} closed candles / ${oneHour.pages} pages; EMA2000=${ema2000}; CCI1200=${cci1h}; latest=${new Date(oneHour.latest).toISOString()}`, true);
     } catch (error) {
-      addCheck(result, "1h history + CCI1200 + EMA5000", false, error.message);
+      addCheck(result, "1h history + CCI1200 + EMA2000", false, error.message, true);
     }
 
     let twoHour = null;
@@ -279,28 +302,24 @@ async function checkExchange(config) {
       const ema2000_2h = calculateEMA(twoHour.bars.map(x=>x.close), 2000).at(-1);
       const close2h = twoHour.bars.at(-1)?.close;
       const ok = twoHour.fresh && Number.isFinite(cci2h) && Number.isFinite(ema2000_2h);
-      const rulePass = Number.isFinite(close2h) && close2h > ema2000_2h && cci2h > 100;
       result.history["2h"] = { candles: twoHour.bars.length, method: twoHourMethod, pages: twoHour.pages, latest: new Date(twoHour.latest).toISOString(), fresh: twoHour.fresh };
       result.indicators.cci1200_2h = cci2h;
       result.indicators.ema2000_2h = ema2000_2h;
-      result.ruleChecks = { ...(result.ruleChecks ?? {}), long2h: rulePass };
       addCheck(result, "2h history + EMA2000 + CCI1200", ok,
-        `${twoHour.bars.length} closed candles; ${twoHourMethod}; EMA2000=${ema2000_2h}; CCI1200=${cci2h}; longConditionNow=${rulePass}; latest=${new Date(twoHour.latest).toISOString()}`, true);
+        `${twoHour.bars.length} closed candles; ${twoHourMethod}; EMA2000=${ema2000_2h}; CCI1200=${cci2h}; latest=${new Date(twoHour.latest).toISOString()}`, true);
     } else {
-      addCheck(result, "2h history + CCI1200", false, "No fresh 1200-candle native 2h history or valid 1h aggregation", true);
+      addCheck(result, "2h history + EMA2000 + CCI1200", false, "No fresh 2000-candle native 2h history or valid 1h aggregation", true);
     }
 
     try {
       const fourHour = await fetchVenueHistory(config, exchange, btc, "4h", NEED["4h"]);
       const values = calculateLatestIndicators(fourHour.bars, { emaLength: 500, cciLength: 1200 });
-      const rulePass = values.close > values.ema && values.cci > 100;
       const ok = fourHour.fresh && Number.isFinite(values.ema) && Number.isFinite(values.cci);
       result.history["4h"] = { candles: fourHour.bars.length, pages: fourHour.pages, latest: new Date(fourHour.latest).toISOString(), fresh: fourHour.fresh };
       result.indicators.ema500_4h = values.ema;
       result.indicators.cci1200_4h = values.cci;
-      result.ruleChecks = { ...(result.ruleChecks ?? {}), long4h: rulePass };
       addCheck(result, "4h history + EMA500 + CCI1200", ok,
-        `${fourHour.bars.length} closed candles / ${fourHour.pages} pages; EMA500=${values.ema}; CCI1200=${values.cci}; longConditionNow=${rulePass}; latest=${new Date(fourHour.latest).toISOString()}`, true);
+        `${fourHour.bars.length} closed candles / ${fourHour.pages} pages; EMA500=${values.ema}; CCI1200=${values.cci}; latest=${new Date(fourHour.latest).toISOString()}`, true);
     } catch (error) {
       addCheck(result, "4h history + EMA500 + CCI1200", false, error.message, true);
     }
@@ -318,18 +337,16 @@ async function checkExchange(config) {
       const vwap15m = sessionVolume>0
         ? sessionBars.reduce((sum,x)=>sum+((x.high+x.low+x.close)/3)*x.volume,0)/sessionVolume
         : NaN;
-      const rulePass = ema9_15m > vwap15m && ema9_15m > ema21_15m && cci15m > 170;
       const ok = fifteen.fresh && Number.isFinite(cci15m) && Number.isFinite(ema9_15m) && Number.isFinite(ema21_15m) && Number.isFinite(vwap15m);
       result.history["15m"] = { candles: fifteen.bars.length, pages: fifteen.pages, latest: new Date(fifteen.latest).toISOString(), fresh: fifteen.fresh };
       result.indicators.cci1200_15m = cci15m;
       result.indicators.ema9_15m = ema9_15m;
       result.indicators.ema21_15m = ema21_15m;
       result.indicators.vwap15m_utc_session = vwap15m;
-      result.ruleChecks = { ...(result.ruleChecks ?? {}), optional15m: rulePass };
       addCheck(result, "15m history + EMA9 + EMA21 + session VWAP + CCI1200", ok,
-        `${fifteen.bars.length} candles; EMA9=${ema9_15m}; EMA21=${ema21_15m}; VWAP(UTC session)=${vwap15m}; CCI1200=${cci15m}; optionalConditionNow=${rulePass}; latest=${new Date(fifteen.latest).toISOString()}`);
+        `${fifteen.bars.length} candles; EMA9=${ema9_15m}; EMA21=${ema21_15m}; VWAP(UTC session)=${vwap15m}; CCI1200=${cci15m}; latest=${new Date(fifteen.latest).toISOString()}`, true);
     } catch (error) {
-      addCheck(result, "15m history + CCI1200", false, error.message);
+      addCheck(result, "15m history + EMA9 + EMA21 + session VWAP + CCI1200", false, error.message, true);
     }
 
     try {
@@ -338,22 +355,20 @@ async function checkExchange(config) {
       const ema20 = calculateEMA(closes,20).at(-1);
       const ema50 = calculateEMA(closes,50).at(-1);
       const closeDaily = closes.at(-1);
-      const rulePass = closeDaily > ema20 && closeDaily > ema50;
       const ok = daily.fresh && Number.isFinite(ema20) && Number.isFinite(ema50);
       result.history["1d"] = { candles: daily.bars.length, pages: daily.pages, latest: new Date(daily.latest).toISOString(), fresh: daily.fresh };
       result.indicators.ema20_1d = ema20;
       result.indicators.ema50_1d = ema50;
-      result.ruleChecks = { ...(result.ruleChecks ?? {}), daily: rulePass };
       addCheck(result, "Daily history + EMA20 + EMA50", ok,
-        `${daily.bars.length} closed candles / ${daily.pages} pages; EMA20=${ema20}; EMA50=${ema50}; longConditionNow=${rulePass}; latest=${new Date(daily.latest).toISOString()}`);
+        `${daily.bars.length} closed candles / ${daily.pages} pages; EMA20=${ema20}; EMA50=${ema50}; latest=${new Date(daily.latest).toISOString()}`, true);
     } catch (error) {
-      addCheck(result, "Daily history + EMA20 + EMA50", false, error.message);
+      addCheck(result, "Daily history + EMA20 + EMA50", false, error.message, true);
     }
 
     const coreChecks = result.checks.filter(x=>x.core);
-    const optionalChecks = result.checks.filter(x=>!x.core);
-    result.coreStatus = coreChecks.length===4 && coreChecks.every(x=>x.status==="PASS") ? "PASS" : "FAIL";
-    result.optionalStatus = optionalChecks.length===3 && optionalChecks.every(x=>x.status==="PASS") ? "PASS" : "PARTIAL";
+    const timeframeChecks = coreChecks.filter(x => /^(15m|1h|2h|4h|Daily) history/.test(x.test));
+    result.timeframeStatus = timeframeChecks.length === 5 && timeframeChecks.every(x => x.status === "PASS") ? "PASS" : "FAIL";
+    result.coreStatus = coreChecks.length === 7 && coreChecks.every(x => x.status === "PASS") ? "PASS" : "FAIL";
     result.status = result.coreStatus;
     if (exchange.has?.fetchOpenInterest) {
       try {
@@ -382,9 +397,9 @@ for (const config of EXCHANGES) {
   console.log(JSON.stringify(result));
 }
 const corePassed = report.filter(x=>x.coreStatus==="PASS").length;
-const optionalFull = report.filter(x=>x.optionalStatus==="PASS").length;
+const timeframePassed = report.filter(x=>x.timeframeStatus==="PASS").length;
 const coreFailed = report.length-corePassed;
-const payload = { generatedAt: new Date().toISOString(), candidateExchanges: EXCHANGES.map(x=>x.label), results: report, summary: { corePassed, coreFailed, optionalFull, total: report.length } };
+const payload = { generatedAt: new Date().toISOString(), candidateExchanges: EXCHANGES.map(x=>x.label), results: report, summary: { corePassed, coreFailed, timeframePassed, total: report.length } };
 await writeFile("final-seven-exchange-api-report.json", JSON.stringify(payload,null,2));
-console.log(`FINAL | CORE=${corePassed}/7 PASS | OPTIONAL_ALL_TIMEFRAMES=${optionalFull}/7 PASS | CORE_FAILED=${coreFailed}`);
+console.log(`FINAL | API_AND_MARKETS=${corePassed}/7 PASS | FIVE_TIMEFRAMES=${timeframePassed}/7 PASS | FAILED=${coreFailed}`);
 if (corePassed !== 7) process.exitCode = 1;

@@ -17,32 +17,54 @@ permissions:
   contents: read
 
 jobs:
-  validation:
+  exchange-data-qualification:
+    name: Seven-exchange API and timeframe data qualification
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Run deterministic indicator tests
+      - name: Test unique asset grouping
+        run: node --test scripts/test-unique-assets.mjs
+      - name: Test initial universe entry gate
+        run: node --test scripts/test-initial-filter.mjs
+      - name: Run deterministic indicator calculation tests
         run: node --test scripts/test-indicators.mjs
-      - name: Run strict long-strategy tests
-        run: node --test scripts/test-strategy.mjs
       - name: Install CCXT adapters for final seven exchanges
         run: npm install --no-save --no-package-lock ccxt
-      - name: Test final seven exchanges across all five timeframes
+      - name: Qualify public API, closed-candle history, freshness and indicators on all five timeframes
         run: node scripts/check-final-seven-exchanges.mjs
-      - name: Upload final seven-exchange API report
+      - name: Upload seven-exchange timeframe qualification report
         if: always() && hashFiles('final-seven-exchange-api-report.json') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: final-seven-exchange-api-report
+          name: final-seven-exchange-timeframe-report
           path: final-seven-exchange-api-report.json
           if-no-files-found: ignore
           retention-days: 14
-      - name: Smoke-test live scanner on BTC perpetuals
+
+  direction-strategy-validation:
+    name: Separate LONG strategy and scanner smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run LONG strategy unit tests
+        run: node --test scripts/test-strategy.mjs
+      - name: Smoke-test currently implemented scanner adapters (OKX and MEXC only)
         env:
           EXCHANGES: OKX,MEXC
-          SYMBOLS: BTC-USDT-SWAP,BTC_USDT
+          SYMBOLS: XRP-USDT-SWAP,XRP_USDT
           CONCURRENCY: "1"
+          TIMEFRAMES: "15m,1h,2h,4h,1d"
           REQUIRE_DATA: "true"
         run: node scripts/scan-long.mjs
+      - name: Upload scanner smoke-test results
+        if: always() && hashFiles('scan-results.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-scanner-smoke-test
+          path: scan-results.json
+          if-no-files-found: ignore
+          retention-days: 14

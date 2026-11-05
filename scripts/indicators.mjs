@@ -44,17 +44,45 @@ export function calculateCCI(bars, length) {
   return output;
 }
 
-export function calculateLatestIndicators(bars, { emaLength = 500, cciLength = 1200 } = {}) {
-  assertBars(bars, Math.max(emaLength, cciLength));
+export function calculateSessionVWAP(bars) {
+  if (!Array.isArray(bars) || bars.length === 0) return null;
+  const lastTimestamp = bars[bars.length - 1].timestamp;
+  if (!Number.isFinite(lastTimestamp)) return null;
+  const sessionDate = new Date(lastTimestamp).toISOString().slice(0, 10);
+  let weightedPrice = 0;
+  let totalVolume = 0;
+  for (const bar of bars) {
+    if (!Number.isFinite(bar.timestamp) || new Date(bar.timestamp).toISOString().slice(0, 10) !== sessionDate) continue;
+    if (![bar.high, bar.low, bar.close, bar.volume].every(Number.isFinite) || bar.volume < 0) continue;
+    const typicalPrice = (bar.high + bar.low + bar.close) / 3;
+    weightedPrice += typicalPrice * bar.volume;
+    totalVolume += bar.volume;
+  }
+  return totalVolume > 0 ? weightedPrice / totalVolume : null;
+}
+
+export function calculateLatestIndicators(bars, options = {}) {
+  const emaLengths = Array.isArray(options.emaLengths) && options.emaLengths.length > 0
+    ? options.emaLengths
+    : [options.emaLength ?? 500];
+  const cciLength = options.cciLength === null ? null : (options.cciLength ?? 1200);
+  const required = Math.max(...emaLengths, cciLength ?? 0);
+  assertBars(bars, required);
   const closes = bars.map(bar => bar.close);
-  const ema = calculateEMA(closes, emaLength);
-  const cci = calculateCCI(bars, cciLength);
   const last = bars.length - 1;
+  const emas = {};
+  for (const length of emaLengths) {
+    emas[`ema${length}`] = calculateEMA(closes, length)[last];
+  }
+  const cci = cciLength ? calculateCCI(bars, cciLength)[last] : null;
+  const vwap = options.includeVWAP ? calculateSessionVWAP(bars) : null;
   return {
     timestamp: bars[last].timestamp,
     close: closes[last],
-    ema: ema[last],
-    cci: cci[last],
+    ema: emas[`ema${emaLengths[0]}`],
+    emas,
+    cci,
+    vwap,
     candleCount: bars.length
   };
 }

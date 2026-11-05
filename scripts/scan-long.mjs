@@ -1,9 +1,16 @@
 import { writeFile } from "node:fs/promises";
 import { fetchOkxHistory, fetchMexcHistory } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
-import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
+import {
+  isLongSetupForSelectedTimeframes, keepClosedCandles, LONG_RULE_LABELS
+} from "./strategy.mjs";
+import { filterInitialUniverse, isUsdStablecoinBase } from "./initial-filter.mjs";
+import { buildUniqueAssetList } from "./unique-assets.mjs";
 
-const CANDLE_COUNT = 2000;
+const CANDLE_COUNT_BY_TIMEFRAME = { "15m": 1200, "1h": 2000, "2h": 2000, "4h": 1200, "1d": 50 };
+const OKX_BAR_BY_TIMEFRAME = { "15m": "15m", "1h": "1H", "2h": "2H", "4h": "4H", "1d": "1D" };
+const SELECTED_TIMEFRAMES = [...new Set((process.env.TIMEFRAMES ?? "4h")
+  .split(",").map(value => value.trim().toLowerCase()).filter(Boolean))];
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC")
   .split(",").map(value => value.trim().toUpperCase()).filter(Boolean);
@@ -51,7 +58,10 @@ async function getOkxSymbols() {
       }
       return payload.data
         .filter(item => item.state === "live" && item.settleCcy === "USDT")
-        .map(item => ({ exchange: "OKX", symbol: item.instId, base, display: item.instId }));
+        .map(item => ({
+          exchange: "OKX", symbol: item.instId, base,
+          baseAsset: item.ctValCcy || item.instId.split("-")[0], display: item.instId
+        }));
     } catch (error) {
       lastError = error;
     }
@@ -66,7 +76,35 @@ async function getMexcSymbols() {
   }
   return payload.data
     .filter(item => item.quoteCoin === "USDT" && item.state === 0 && item.symbol?.endsWith("_USDT"))
-    .map(item => ({ exchange: "MEXC", symbol: item.symbol, display: item.symbol }));
+    .map(item => ({
+      exchange: "MEXC", symbol: item.symbol,
+      baseAsset: item.baseCoin || item.symbol.split("_")[0], display: item.symbol
+    }));
+}
+
+
+async function getOkxTicker(symbol) {
+  const payload = await getJson(
+    "https://www.okx.com/api/v5/market/ticker?instId=" + encodeURIComponent(symbol)
+  );
+  if (payload.code !== "0" || !Array.isArray(payload.data) || !payload.data[0]) {
+    throw new Error(`OKX ticker rejected for ${symbol}: ${payload.msg ?? payload.code}`);
+  }
+  return Number(payload.data[0].last);
+}
+
+async function getMexcTicker(symbol) {
+  const payload = await getJson(
+    "https://api.mexc.com/api/v1/contract/ticker?symbol=" + encodeURIComponent(symbol)
+  );
+  if (!(payload.success === true || payload.code === 0)) {
+    throw new Error(`MEXC ticker rejected for ${symbol}: ${payload.message ?? payload.code}`);
+  }
+  const rows = Array.isArray(payload.data) ? payload.data : payload.data ? [payload.data] : [];
+  const row = rows.find(item => item?.symbol === symbol) ?? rows[0];
+  const price = Number(row?.lastPrice ?? row?.last ?? row?.price);
+  if (!Number.isFinite(price) || price <= 0) throw new Error(`MEXC ticker has no current price for ${symbol}`);
+  return price;
 }
 
 async function mapLimit(items, limit, worker) {
@@ -83,30 +121,80 @@ async function mapLimit(items, limit, worker) {
   return output;
 }
 
+async function fetchTimeframeHistory(item, timeframe) {
+  const count = CANDLE_COUNT_BY_TIMEFRAME[timeframe] + 1;
+  if (!count) throw new Error(`Unsupported selected timeframe: ${timeframe}`);
+  if (item.exchange === "OKX") {
+    return fetchOkxHistory({
+      base: item.base,
+      instId: item.symbol,
+      bar: OKX_BAR_BY_TIMEFRAME[timeframe],
+      count
+    });
+  }
+  return fetchMexcHistory({ symbol: item.symbol, interval: timeframe, count });
+}
+
+function indicatorOptionsForTimeframe(timeframe) {
+  if (timeframe === "4h") return { emaLengths: [500], cciLength: 1200 };
+  if (timeframe === "1h" || timeframe === "2h") return { emaLengths: [2000], cciLength: 1200 };
+  if (timeframe === "15m") return { emaLengths: [9, 21], cciLength: 1200, includeVWAP: true };
+  if (timeframe === "1d") return { emaLengths: [20, 50], cciLength: null };
+  throw new Error(`Unsupported selected timeframe: ${timeframe}`);
+}
+
+function mapTimeframeValues(timeframe, indicators) {
+  if (timeframe === "4h") return {
+    close: indicators.close, ema500: indicators.emas.ema500, cci1200: indicators.cci,
+    candleTime: indicators.timestamp, candleCount: indicators.candleCount
+  };
+  if (timeframe === "1h" || timeframe === "2h") return {
+    close: indicators.close, ema2000: indicators.emas.ema2000, cci1200: indicators.cci,
+    candleTime: indicators.timestamp, candleCount: indicators.candleCount
+  };
+  if (timeframe === "15m") return {
+    close: indicators.close, ema9: indicators.emas.ema9, ema21: indicators.emas.ema21,
+    vwap: indicators.vwap, cci1200: indicators.cci,
+    candleTime: indicators.timestamp, candleCount: indicators.candleCount
+  };
+  return {
+    close: indicators.close, ema20: indicators.emas.ema20, ema50: indicators.emas.ema50,
+    candleTime: indicators.timestamp, candleCount: indicators.candleCount
+  };
+}
+
 async function scanSymbol(item) {
   try {
-    const raw = item.exchange === "OKX"
-      ? await fetchOkxHistory({ base: item.base, instId: item.symbol, bar: "4H", count: CANDLE_COUNT })
-      : await fetchMexcHistory({ symbol: item.symbol, interval: "4h", count: CANDLE_COUNT });
-    const bars = keepClosedFourHourCandles(raw);
-    if (bars.length < 1201) {
-      throw new Error(`not enough closed candles: ${bars.length}/1201`);
+    const valuesByTimeframe = {};
+    for (const timeframe of SELECTED_TIMEFRAMES) {
+      const raw = await fetchTimeframeHistory(item, timeframe);
+      const bars = keepClosedCandles(raw, timeframe);
+      const required = CANDLE_COUNT_BY_TIMEFRAME[timeframe];
+      if (bars.length < required) {
+        throw new Error(`not enough closed ${timeframe} candles: ${bars.length}/${required}`);
+      }
+      const indicators = calculateLatestIndicators(bars, indicatorOptionsForTimeframe(timeframe));
+      valuesByTimeframe[timeframe] = mapTimeframeValues(timeframe, indicators);
     }
-    const values = calculateLatestIndicators(bars, { emaLength: 500, cciLength: 1200 });
-    const passed = isLongSetup({ close: values.close, ema500: values.ema, cci1200: values.cci });
+    const passed = isLongSetupForSelectedTimeframes(valuesByTimeframe, SELECTED_TIMEFRAMES);
     return {
       exchange: item.exchange,
       symbol: item.display,
+      baseAsset: item.baseAsset,
       status: passed ? "LONG" : "NO_MATCH",
-      close: values.close,
-      ema500: values.ema,
-      cci1200: values.cci,
-      candleTime: new Date(values.timestamp).toISOString()
+      selectedTimeframes: SELECTED_TIMEFRAMES,
+      timeframes: Object.fromEntries(SELECTED_TIMEFRAMES.map(timeframe => [
+        timeframe,
+        { ...valuesByTimeframe[timeframe], passed: isLongSetupForSelectedTimeframes(
+          { [timeframe]: valuesByTimeframe[timeframe] }, [timeframe]
+        ) }
+      ]))
     };
   } catch (error) {
     return {
       exchange: item.exchange,
       symbol: item.display,
+      baseAsset: item.baseAsset,
       status: "DATA_ERROR",
       error: error.message
     };
@@ -117,12 +205,38 @@ if (!Number.isInteger(CONCURRENCY) || CONCURRENCY < 1 || CONCURRENCY > 10) {
   throw new Error("CONCURRENCY must be an integer from 1 to 10");
 }
 if (EXCHANGES.some(exchange => !["OKX", "MEXC"].includes(exchange))) {
-  throw new Error("Supported exchanges in this stage: OKX, MEXC");
+  throw new Error("Supported scan adapters in this stage: OKX, MEXC");
+}
+const validTimeframes = new Set(Object.keys(CANDLE_COUNT_BY_TIMEFRAME));
+if (SELECTED_TIMEFRAMES.length === 0 || SELECTED_TIMEFRAMES.some(timeframe => !validTimeframes.has(timeframe))) {
+  throw new Error("TIMEFRAMES must contain one or more of: 15m,1h,2h,4h,1d");
 }
 
 const symbolLists = await Promise.all(EXCHANGES.map(async exchange => {
-  const symbols = exchange === "OKX" ? await getOkxSymbols() : await getMexcSymbols();
-  const selected = SYMBOL_FILTER.length > 0 ? symbols.filter(item => SYMBOL_FILTER.includes(item.symbol)) : symbols;
+  const allSymbols = exchange === "OKX" ? await getOkxSymbols() : await getMexcSymbols();
+  const symbols = SYMBOL_FILTER.length > 0
+    ? allSymbols.filter(item => SYMBOL_FILTER.includes(item.symbol))
+    : allSymbols;
+  // Reject stablecoins from contract metadata before making any price request.
+  const nonStablecoinSymbols = symbols.filter(item => !isUsdStablecoinBase(item.baseAsset));
+  const tickers = new Map();
+  await mapLimit(nonStablecoinSymbols, Math.max(1, Math.min(CONCURRENCY, 4)), async item => {
+    try {
+      const price = exchange === "OKX"
+        ? await getOkxTicker(item.symbol)
+        : await getMexcTicker(item.symbol);
+      tickers.set(item.symbol, price);
+    } catch (error) {
+      console.warn(`PRICE_UNAVAILABLE | ${exchange} | ${item.symbol} | ${String(error.message || error).slice(0, 180)}`);
+    }
+  });
+  const gate = filterInitialUniverse(symbols, tickers, 30);
+  console.log(
+    `INITIAL_FILTER | ${exchange} | candidates=${gate.counts.candidates} | allowed=${gate.counts.allowed} | stablecoins=${gate.counts.stablecoin} | above30=${gate.counts.abovePrice} | noPrice=${gate.counts.priceUnavailable}`
+  );
+  const selected = SYMBOL_FILTER.length > 0
+    ? gate.allowed.filter(item => SYMBOL_FILTER.includes(item.symbol))
+    : gate.allowed;
   return MAX_SYMBOLS > 0 ? selected.slice(0, MAX_SYMBOLS) : selected;
 }));
 const universe = symbolLists.flat();
@@ -140,17 +254,28 @@ const results = await mapLimit(universe, CONCURRENCY, async item => {
 });
 const matches = results.filter(item => item.status === "LONG");
 const errors = results.filter(item => item.status === "DATA_ERROR");
+const uniqueAssets = buildUniqueAssetList(results);
+const uniqueLongAssets = uniqueAssets.filter(item => item.qualifiedExchanges.length > 0);
 const summary = {
   generatedAt: new Date().toISOString(),
-  rule: "4h close > EMA500 AND CCI(1200) > 100",
+  direction: "LONG",
+  selectedTimeframes: SELECTED_TIMEFRAMES,
+  rule: SELECTED_TIMEFRAMES.map(timeframe => LONG_RULE_LABELS[timeframe]).join(" AND "),
   exchanges: EXCHANGES,
-  scanned: results.length,
-  longMatches: matches.length,
+  scannedContracts: results.length,
+  uniqueAssetCount: uniqueAssets.length,
+  longMatchContracts: matches.length,
+  uniqueLongAssetCount: uniqueLongAssets.length,
   dataErrors: errors.length,
+  uniqueAssets,
+  uniqueLongAssets,
   matches,
   errors
 };
 await writeFile("scan-results.json", JSON.stringify(summary, null, 2));
-console.log(`SUMMARY | scanned=${results.length} | LONG=${matches.length} | DATA_ERROR=${errors.length}`);
+console.log(`SUMMARY | contracts=${results.length} | uniqueAssets=${uniqueAssets.length} | LONG contracts=${matches.length} | unique LONG assets=${uniqueLongAssets.length} | DATA_ERROR=${errors.length}`);
 console.log("RESULT_FILE | scan-results.json");
+for (const item of errors) {
+  console.error(`DATA_ERROR | ${item.exchange} | ${item.symbol} | ${item.error}`);
+}
 if (REQUIRE_DATA && errors.length > 0) process.exitCode = 1;

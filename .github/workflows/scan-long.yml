@@ -7,6 +7,10 @@ on:
         description: "Exchanges to scan (OKX,MEXC)"
         required: true
         default: "OKX,MEXC"
+      timeframes:
+        description: "Selected LONG timeframes (15m,1h,2h,4h,1d); all selected conditions must pass"
+        required: true
+        default: "4h"
       max_symbols:
         description: "0 = all eligible USDT perpetual contracts; positive = test limit"
         required: true
@@ -30,13 +34,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Test indicator and strategy formulas
+      - name: Test initial universe gate, indicators and strategy formulas
         run: |
+          node --test scripts/test-initial-filter.mjs
           node --test scripts/test-indicators.mjs
           node --test scripts/test-strategy.mjs
       - name: Scan selected futures exchanges
         env:
           EXCHANGES: ${{ inputs.exchanges }}
+          TIMEFRAMES: ${{ inputs.timeframes }}
           MAX_SYMBOLS: ${{ inputs.max_symbols }}
           CONCURRENCY: ${{ inputs.concurrency }}
         run: node scripts/scan-long.mjs
