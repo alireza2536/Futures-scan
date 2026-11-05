@@ -3,7 +3,8 @@ const USD_STABLECOIN_BASES = new Set([
   "PYUSD", "RLUSD", "FDUSD", "TUSD", "GUSD", "GHO", "USDF", "USDT0",
   "BUSD", "UST", "USTC", "FRAX", "CRVUSD", "MIM", "LUSD", "SUSD",
   "DOLA", "ALUSD", "FEI", "EUSD", "USDK", "USDJ", "USN", "USDX",
-  "USD0", "USDB", "USDA", "USDH", "USDL", "USDQ", "USDZ", "USX"
+  "USD0", "USDB", "USDA", "USDH", "USDL", "USDQ", "USDZ", "USX",
+  "USDC.E", "USDT.E", "USDCN", "USDTB", "USDR", "USDT+", "USDC+", "USDCV"
 ]);
 
 export function normalizeBaseAsset(value) {
