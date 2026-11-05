@@ -7,7 +7,7 @@ async function requestJson(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, {
-        headers: { accept: "application/json", "user-agent": "Futures-scan/0.5" },
+        headers: { accept: "application/json", "user-agent": "Futures-scan/0.6" },
         signal: controller.signal
       });
       const body = await response.json();
@@ -87,4 +87,29 @@ export async function fetchMexcHistory({base="https://api.mexc.com",symbol="BTC_
   const bars=dedupeAndSort(mexcRowsToBars(payload.data));
   if (bars.length<count) throw new Error(`MEXC returned only ${bars.length}/${count} unique valid ${interval} bars for ${symbol}`);
   return bars.slice(-count);
+}
+
+// Verifies that a selected timeframe has the full, uninterrupted candle history
+// required by the indicator calculations. Input must contain closed candles only.
+export function assertCandleCoverage(bars, timeframe, requiredCount=1201) {
+  const spec=TIMEFRAMES[timeframe];
+  if (!spec) throw new Error(`Unsupported timeframe: ${timeframe}`);
+  if (!Array.isArray(bars) || bars.length < requiredCount) {
+    throw new Error(`${timeframe} history incomplete: ${bars?.length ?? 0}/${requiredCount} closed candles`);
+  }
+  const selected=bars.slice(-requiredCount);
+  const intervalMs=spec.seconds*1000;
+  for (let i=0;i<selected.length;i+=1) {
+    const bar=selected[i];
+    if (!validBar(bar)) throw new Error(`${timeframe} contains an invalid candle at index ${i}`);
+    if (bar.confirmed===false) throw new Error(`${timeframe} contains an unclosed candle at index ${i}`);
+    if (bar.timestamp % intervalMs !== 0) throw new Error(`${timeframe} candle timestamp is not interval-aligned at index ${i}`);
+    if (i>0) {
+      const delta=bar.timestamp-selected[i-1].timestamp;
+      if (delta!==intervalMs) {
+        throw new Error(`${timeframe} candle gap/overlap at index ${i}: expected ${intervalMs}ms, received ${delta}ms`);
+      }
+    }
+  }
+  return selected;
 }
