@@ -41,24 +41,39 @@ function dedupeSort(rows){
 async function fetchBingxHistory(symbol,timeframe,count){
   const intervalMs=TIMEFRAMES[timeframe].seconds*1000;
   const pair=symbol.includes("/")?symbol.split("/")[0]+"-"+symbol.split("/")[1].split(":")[0]:symbol;
-  const params=new URLSearchParams({
-    symbol:pair,interval:timeframe,
-    startTime:String(Date.now()-intervalMs*(count+4)),
-    endTime:String(Date.now()),
-    limit:String(Math.min(1440,count+4)),timeZone:"0"
-  });
-  const url="https://open-api.bingx.com/openApi/swap/v3/quote/klines?"+params;
-  let payload;
-  for(let attempt=0;attempt<5;attempt+=1){
-    payload=await jsonRequest(url);
-    if([0,"0"].includes(payload.code)) break;
-    if(String(payload.code)==="100410"&&attempt<4){await sleep(2500*(attempt+1));continue;}
-    throw new Error("BingX kline rejected: "+payload.code+" "+(payload.msg??""));
+  const collected=new Map();
+  let cursor=Math.floor((Date.now()-intervalMs*(count+5))/intervalMs)*intervalMs;
+  const maxPages=Math.ceil(count/950)+4;
+  for(let page=0;page<maxPages&&collected.size<count;page+=1){
+    const startTime=cursor;
+    const endTime=Math.min(Date.now(),startTime+intervalMs*949);
+    const params=new URLSearchParams({
+      symbol:pair,interval:timeframe,
+      startTime:String(startTime),endTime:String(endTime),
+      limit:"1000",timeZone:"0"
+    });
+    const url="https://open-api.bingx.com/openApi/swap/v3/quote/klines?"+params;
+    let payload;
+    for(let attempt=0;attempt<5;attempt+=1){
+      payload=await jsonRequest(url);
+      if([0,"0"].includes(payload.code)) break;
+      if(String(payload.code)==="100410"&&attempt<4){await sleep(2500*(attempt+1));continue;}
+      throw new Error("BingX kline rejected: "+payload.code+" "+(payload.msg??""));
+    }
+    if(!Array.isArray(payload.data)) throw new Error("BingX kline data is not an array");
+    const rows=payload.data.map(row=>normalizeBar(row.time,row.open,row.high,row.low,row.close,row.volume));
+    const bars=dedupeSort(rows);
+    if(!bars.length) break;
+    for(const bar of bars) collected.set(bar.timestamp,bar);
+    const newest=bars[bars.length-1].timestamp;
+    const next=newest+intervalMs;
+    if(next<=cursor) throw new Error("BingX pagination did not advance");
+    cursor=next;
+    if(bars.length<2) break;
+    await sleep(1200);
   }
-  await sleep(1200);
-  if(!Array.isArray(payload.data)) throw new Error("BingX kline data is not an array");
-  const bars=dedupeSort(payload.data.map(row=>normalizeBar(row.time,row.open,row.high,row.low,row.close,row.volume)));
-  if(bars.length<count) throw new Error("BingX "+timeframe+": received "+bars.length+"/"+count+" valid candles");
+  const bars=dedupeSort([...collected.values()]);
+  if(bars.length<count) throw new Error("BingX "+timeframe+": received "+bars.length+"/"+count+" valid candles across "+maxPages+" history pages");
   return bars.slice(-count);
 }
 async function fetchWeexHistory(symbol,timeframe,count){
