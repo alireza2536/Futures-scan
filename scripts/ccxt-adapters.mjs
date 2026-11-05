@@ -37,6 +37,24 @@ function dedupeSort(rows){
   }
   return [...map.values()].sort((a,b)=>a.timestamp-b.timestamp);
 }
+async function fetchBingxHistory(symbol,timeframe,count){
+  const interval=TIMEFRAMES[timeframe].seconds;
+  const pair=symbol.includes("/")?symbol.split("/")[0]+"-"+symbol.split("/")[1].split(":")[0]:symbol;
+  const params=new URLSearchParams({
+    symbol:pair,interval,
+    startTime:String(Date.now()-interval*1000*(count+4)),
+    endTime:String(Date.now()),
+    limit:String(Math.min(1440,count+4)),timeZone:"0"
+  });
+  const payload=await jsonRequest("https://open-api.bingx.com/openApi/swap/v3/quote/klines?"+params);
+  if(![0,"0"].includes(payload.code)||!Array.isArray(payload.data)){
+    throw new Error("BingX kline rejected: "+payload.code+" "+(payload.msg??""));
+  }
+  const bars=dedupeSort(payload.data.map(row=>normalizeBar(row[0],row[1],row[2],row[3],row[4],row[5])));
+  if(bars.length<count) throw new Error("BingX "+timeframe+": received "+bars.length+"/"+count+" valid candles");
+  return bars.slice(-count);
+}
+
 async function fetchWeexHistory(symbol,timeframe,count){
   if(timeframe==="2h"){
     const hourly=await fetchWeexHistory(symbol,"1h",count*2+4);
@@ -173,6 +191,7 @@ export async function createCcxtAdapter(exchangeName) {
 export async function fetchCcxtHistory({client,symbol,timeframe,count=1203}){
   if(!TF[timeframe]) throw new Error(`Unsupported timeframe: ${timeframe}`);
   if(!Number.isInteger(count)||count<2||count>5000) throw new Error("count must be 2..5000");
+  if(client.id==="bingx") return fetchBingxHistory(client.market(symbol).id,timeframe,count);
   if(client.id==="weex") return fetchWeexHistory(symbol,timeframe,count);
   if(client.id==="htx") return fetchHtxHistory(client.market(symbol).id,timeframe,count);
   if(client.id==="kucoinfutures") return fetchKucoinHistory(client,symbol,timeframe,count);
