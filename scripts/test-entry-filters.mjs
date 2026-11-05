@@ -44,11 +44,19 @@ test("excludes tokenized equities and equity indices", () => {
 });
 
 test("excludes exchange synthetic FX and index identifiers", () => {
-  for (const baseAsset of ["NCSINIFTYBK2USD", "NCFXUSD2TWD", "EURUSD"]) {
+  for (const baseAsset of ["NCSINIFTYBK2USD", "NCFXUSD2TWD", "EURUSD", "USDJPY"]) {
     assert.deepEqual(evaluateEntryEligibility({ baseAsset, lastPrice: 10 }), {
       eligible: false, reason: "NON_CRYPTO_UNDERLYING"
     });
   }
+});
+
+test("does not classify ambiguous GAS base as non-crypto without market metadata", () => {
+  assert.equal(evaluateEntryEligibility({ baseAsset: "GAS", lastPrice: 10 }).eligible, true);
+});
+
+test("does not classify six-letter crypto tickers as FX unless both halves are fiat codes", () => {
+  assert.equal(evaluateEntryEligibility({ baseAsset: "ABCUSD", lastPrice: 10 }).eligible, true);
 });
 
 test("continues to admit ordinary crypto assets under the price ceiling", () => {
