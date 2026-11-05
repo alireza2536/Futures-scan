@@ -7,8 +7,25 @@ const USD_STABLECOIN_BASES = new Set([
   "USDC.E", "USDT.E", "USDCN", "USDTB", "USDR", "USDT+", "USDC+", "USDCV"
 ]);
 
+function rawBaseAsset(value) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function priceDivisor(baseAsset, contractSymbol = "") {
+  const symbolBase = String(contractSymbol ?? "").trim().toUpperCase().split(/[\/_-]/)[0];
+  const candidates = [rawBaseAsset(baseAsset), symbolBase];
+  for (const candidate of candidates) {
+    for (const multiplier of ["1000000", "100000", "10000", "1000"]) {
+      if (candidate.startsWith(multiplier) && candidate.length > multiplier.length) {
+        return Number(multiplier);
+      }
+    }
+  }
+  return 1;
+}
+
 export function normalizeBaseAsset(value) {
-  let base = String(value ?? "").trim().toUpperCase();
+  let base = rawBaseAsset(value);
   for (const multiplier of ["1000000", "100000", "10000", "1000"]) {
     if (base.startsWith(multiplier) && base.length > multiplier.length) {
       base = base.slice(multiplier.length);
@@ -18,8 +35,8 @@ export function normalizeBaseAsset(value) {
   return base;
 }
 
-export function initialEntryDecision(baseAsset, price, maxPrice = 30) {
-  const base = normalizeBaseAsset(baseAsset);
+export function initialEntryDecision(baseAsset, price, maxPrice = 30, contractSymbol = "") {
+  const base = normalizeBaseAsset(baseAsset || contractSymbol);
   if (USD_STABLECOIN_BASES.has(base)) {
     return { allowed: false, reason: "USD_STABLECOIN", price: null };
   }
@@ -27,10 +44,11 @@ export function initialEntryDecision(baseAsset, price, maxPrice = 30) {
   if (!Number.isFinite(last) || last <= 0) {
     return { allowed: false, reason: "PRICE_UNAVAILABLE", price: null };
   }
-  if (last > maxPrice) {
-    return { allowed: false, reason: "PRICE_ABOVE_30_USDT", price: last };
+  const underlyingPrice = last / priceDivisor(baseAsset, contractSymbol);
+  if (underlyingPrice > maxPrice) {
+    return { allowed: false, reason: "PRICE_ABOVE_30_USDT", price: underlyingPrice };
   }
-  return { allowed: true, reason: "ALLOWED", price: last };
+  return { allowed: true, reason: "ALLOWED", price: underlyingPrice };
 }
 
 export function filterInitialUniverse(markets, tickerMap, maxPrice = 30) {
@@ -38,7 +56,7 @@ export function filterInitialUniverse(markets, tickerMap, maxPrice = 30) {
     candidates: markets.length, allowed: 0, stablecoin: 0, abovePrice: 0, priceUnavailable: 0
   }};
   for (const market of markets) {
-    const decision = initialEntryDecision(market.baseAsset, tickerMap.get(market.symbol), maxPrice);
+    const decision = initialEntryDecision(market.baseAsset, tickerMap.get(market.symbol), maxPrice, market.symbol);
     if (decision.allowed) {
       result.allowed.push({ ...market, initialPrice: decision.price });
       result.counts.allowed += 1;
