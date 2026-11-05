@@ -1,5 +1,5 @@
 import ccxt from "ccxt";
-import { TIMEFRAMES, aggregateHourlyTo2h } from "./market-data.mjs";
+import { TIMEFRAMES, aggregateHourlyTo2h, aggregateHourlyTo1d } from "./market-data.mjs";
 
 const EXCHANGE_IDS = Object.freeze({
   BINGX: "bingx", WEEX: "weex", HTX: "htx", KUCOIN: "kucoinfutures", XT: "xt"
@@ -84,6 +84,12 @@ async function fetchWeexHistory(symbol,timeframe,count){
   return bars.slice(-count);
 }
 async function fetchHtxHistory(symbol,timeframe,count){
+  if(timeframe==="1d"){
+    const hourly=await fetchHtxHistory(symbol,"1h",count*24+4);
+    const bars=aggregateHourlyTo1d(hourly);
+    if(bars.length<count) throw new Error("HTX UTC 1d aggregation: "+bars.length+"/"+count+" complete daily candles from hourly history");
+    return bars.slice(-count);
+  }
   if(timeframe==="2h"){
     const hourly=await fetchHtxHistory(symbol,"1h",count*2+4);
     const bars=aggregateHourlyTo2h(hourly);
@@ -94,7 +100,7 @@ async function fetchHtxHistory(symbol,timeframe,count){
   const intervalMs=TIMEFRAMES[timeframe].seconds*1000;
   const collected=new Map();
   let cursor=Math.floor((Date.now()-intervalMs*(count+4))/intervalMs)*intervalMs;
-  for(let page=0;page<8&&collected.size<count;page+=1){
+  for(let page=0;page<Math.ceil(count/1800)+3&&collected.size<count;page+=1){
     const chunk=Math.min(1800,count-collected.size+4);
     const end=cursor+intervalMs*(chunk-1);
     const params=new URLSearchParams({contract_code:symbol,period});
