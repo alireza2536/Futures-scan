@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { fetchOkxHistory, fetchMexcHistory } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
+import { filterInitialUniverse } from "./initial-filter.mjs";
 
 const CANDLE_COUNT = 2000;
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
@@ -51,7 +52,10 @@ async function getOkxSymbols() {
       }
       return payload.data
         .filter(item => item.state === "live" && item.settleCcy === "USDT")
-        .map(item => ({ exchange: "OKX", symbol: item.instId, base, display: item.instId }));
+        .map(item => ({
+          exchange: "OKX", symbol: item.instId, base,
+          baseAsset: item.ctValCcy || item.instId.split("-")[0], display: item.instId
+        }));
     } catch (error) {
       lastError = error;
     }
@@ -66,7 +70,29 @@ async function getMexcSymbols() {
   }
   return payload.data
     .filter(item => item.quoteCoin === "USDT" && item.state === 0 && item.symbol?.endsWith("_USDT"))
-    .map(item => ({ exchange: "MEXC", symbol: item.symbol, display: item.symbol }));
+    .map(item => ({
+      exchange: "MEXC", symbol: item.symbol,
+      baseAsset: item.baseCoin || item.symbol.split("_")[0], display: item.symbol
+    }));
+}
+
+
+async function getOkxTickers() {
+  const payload = await getJson("https://www.okx.com/api/v5/market/tickers?instType=SWAP");
+  if (payload.code !== "0" || !Array.isArray(payload.data)) {
+    throw new Error(`OKX ticker list rejected: ${payload.msg ?? payload.code}`);
+  }
+  return new Map(payload.data.map(item => [item.instId, Number(item.last)]));
+}
+
+async function getMexcTickers() {
+  const payload = await getJson("https://api.mexc.com/api/v1/contract/ticker");
+  if (!(payload.success === true || payload.code === 0) || !Array.isArray(payload.data)) {
+    throw new Error(`MEXC ticker list rejected: ${payload.message ?? payload.code}`);
+  }
+  return new Map(payload.data.map(item => [
+    item.symbol, Number(item.lastPrice ?? item.last ?? item.price)
+  ]));
 }
 
 async function mapLimit(items, limit, worker) {
@@ -122,7 +148,14 @@ if (EXCHANGES.some(exchange => !["OKX", "MEXC"].includes(exchange))) {
 
 const symbolLists = await Promise.all(EXCHANGES.map(async exchange => {
   const symbols = exchange === "OKX" ? await getOkxSymbols() : await getMexcSymbols();
-  const selected = SYMBOL_FILTER.length > 0 ? symbols.filter(item => SYMBOL_FILTER.includes(item.symbol)) : symbols;
+  const tickers = exchange === "OKX" ? await getOkxTickers() : await getMexcTickers();
+  const gate = filterInitialUniverse(symbols, tickers, 30);
+  console.log(
+    `INITIAL_FILTER | ${exchange} | candidates=${gate.counts.candidates} | allowed=${gate.counts.allowed} | stablecoins=${gate.counts.stablecoin} | above30=${gate.counts.abovePrice} | noPrice=${gate.counts.priceUnavailable}`
+  );
+  const selected = SYMBOL_FILTER.length > 0
+    ? gate.allowed.filter(item => SYMBOL_FILTER.includes(item.symbol))
+    : gate.allowed;
   return MAX_SYMBOLS > 0 ? selected.slice(0, MAX_SYMBOLS) : selected;
 }));
 const universe = symbolLists.flat();
