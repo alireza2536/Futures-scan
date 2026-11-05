@@ -275,4 +275,7 @@ const summary = {
 await writeFile("scan-results.json", JSON.stringify(summary, null, 2));
 console.log(`SUMMARY | contracts=${results.length} | uniqueAssets=${uniqueAssets.length} | LONG contracts=${matches.length} | unique LONG assets=${uniqueLongAssets.length} | DATA_ERROR=${errors.length}`);
 console.log("RESULT_FILE | scan-results.json");
+for (const item of errors) {
+  console.error(`DATA_ERROR | ${item.exchange} | ${item.symbol} | ${item.error}`);
+}
 if (REQUIRE_DATA && errors.length > 0) process.exitCode = 1;
