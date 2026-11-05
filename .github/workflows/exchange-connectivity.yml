@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Test initial universe entry gate
+        run: node --test scripts/test-initial-filter.mjs
       - name: Run deterministic indicator tests
         run: node --test scripts/test-indicators.mjs
       - name: Run strict long-strategy tests
@@ -39,7 +41,7 @@ jobs:
           path: final-seven-exchange-api-report.json
           if-no-files-found: ignore
           retention-days: 14
-      - name: Smoke-test live scanner on BTC perpetuals
+      - name: Smoke-test live scanner on price-eligible XRP perpetuals
         env:
           EXCHANGES: OKX,MEXC
           SYMBOLS: XRP-USDT-SWAP,XRP_USDT
