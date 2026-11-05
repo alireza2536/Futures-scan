@@ -77,18 +77,34 @@ export const TIMEFRAMES = Object.freeze({
   "1d": { okx:"1Dutc", mexc:"Day1", seconds:86400 }
 });
 export async function fetchMexcHistory({base="https://api.mexc.com",symbol="BTC_USDT",interval="4h",count=1201}={}) {
-  const spec=TIMEFRAMES[interval];
-  if (!spec) throw new Error(`Unsupported MEXC interval: ${interval}`);
-  if (!Number.isInteger(count)||count<2||count>2000) throw new Error("MEXC count must be an integer from 2 to 2000");
-  const end=Math.floor(Date.now()/1000), start=end-spec.seconds*(count+10);
-  const params=new URLSearchParams({interval:spec.mexc,start:String(start),end:String(end)});
-  const payload=await requestJson(`${base}/api/v1/contract/kline/${encodeURIComponent(symbol)}?${params}`);
-  if (payload.success!==true) throw new Error(`MEXC kline rejected: ${payload.message ?? payload.code}`);
-  const bars=dedupeAndSort(mexcRowsToBars(payload.data));
-  if (bars.length<count) throw new Error(`MEXC returned only ${bars.length}/${count} unique valid ${interval} bars for ${symbol}`);
+  if (!TIMEFRAMES[interval]) throw new Error(`Unsupported MEXC interval: ${interval}`);
+  if (!Number.isInteger(count)||count<2||count>5000) throw new Error("MEXC count must be an integer from 2 to 5000");
+  if(interval==="2h"){
+    const hourly=await fetchMexcHistory({base,symbol,interval:"1h",count:count*2+4});
+    const aggregated=aggregateHourlyTo2h(hourly);
+    if(aggregated.length<count) throw new Error(`MEXC 2h aggregation returned only ${aggregated.length}/${count} candles`);
+    return aggregated.slice(-count);
+  }
+  const spec=TIMEFRAMES[interval], intervalSeconds=spec.seconds;
+  const collected=new Map();
+  let cursor=Math.floor((Date.now()/1000-intervalSeconds*(count+5))/intervalSeconds)*intervalSeconds;
+  for(let page=0;page<12&&collected.size<count;page+=1){
+    const pageEnd=Math.min(Math.floor(Date.now()/1000),cursor+intervalSeconds*999);
+    const params=new URLSearchParams({interval:spec.mexc,start:String(cursor),end:String(pageEnd)});
+    const payload=await requestJson(`${base}/api/v1/contract/kline/${encodeURIComponent(symbol)}?${params}`);
+    if(payload.success!==true) throw new Error(`MEXC kline rejected: ${payload.message??payload.code}`);
+    const bars=mexcRowsToBars(payload.data).filter(validBar);
+    if(!bars.length) break;
+    for(const bar of bars) collected.set(bar.timestamp,bar);
+    const newest=Math.max(...bars.map(x=>x.timestamp));
+    const next=Math.floor(newest/1000)+intervalSeconds;
+    if(next<=cursor) break;
+    cursor=next;
+  }
+  const bars=dedupeAndSort([...collected.values()]);
+  if(bars.length<count) throw new Error(`MEXC returned only ${bars.length}/${count} unique valid ${interval} bars for ${symbol}`);
   return bars.slice(-count);
 }
-
 
 export function aggregateHourlyTo2h(hourly) {
   const sorted=dedupeAndSort(hourly);
