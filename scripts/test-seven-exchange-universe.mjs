@@ -58,7 +58,7 @@ try{
       else{
         const adapter=await createCcxtAdapter(name);
         clients.push(adapter.client);
-        markets=adapter.symbols.map(x=>({symbol:x.symbol,baseAsset:x.baseAsset,price:x.lastPriceUsd,quote:"USDT",settle:"USDT",active:true}));
+        markets=adapter.symbols.map(x=>({symbol:x.symbol,baseAsset:x.baseAsset,price:x.lastPriceUsd,quote:"USDT",settle:"USDT",active:true,marketType:x.marketType,marketSubtype:x.marketSubtype,contract:x.contract,swap:x.swap,linear:x.linear,marketInfo:x.marketInfo}));
       }
       const unique=new Set(markets.map(x=>x.symbol));
       const duplicates=markets.length-unique.size;
@@ -67,10 +67,11 @@ try{
       const eligible=markets.filter(x=>evaluateEntryEligibility({baseAsset:x.baseAsset,lastPrice:x.price}).eligible);
       const rejected=markets.length-eligible.length;
       const nonCrypto=markets.filter(x=>isNonCryptoBase(x.baseAsset));
+      const ambiguousGas=markets.filter(x=>x.baseAsset==="GAS").map(x=>({symbol:x.symbol,marketType:x.marketType,marketSubtype:x.marketSubtype,contract:x.contract,swap:x.swap,linear:x.linear,marketInfo:x.marketInfo}));
       const pass=markets.length>0&&duplicates===0&&invalid.length===0;
       const row={exchange:name,status:pass?(missingPrices.length?"PASS_WITH_MISSING_TICKERS_EXCLUDED":"PASS"):"FAIL",activeUsdtPerpetuals:markets.length,uniqueSymbols:unique.size,
         duplicateSymbols:duplicates,invalidContractMetadata:invalid.length,missingOrInvalidTickers:missingPrices.length,missingTickerExamples:missingPrices.slice(0,12).map(x=>x.symbol),
-        eligibleAfterApprovedFilters:eligible.length,rejectedByApprovedFilters:rejected,excludedNonCryptoUnderlyings:nonCrypto.length,nonCryptoExamples:nonCrypto.slice(0,20).map(x=>x.symbol),
+        eligibleAfterApprovedFilters:eligible.length,rejectedByApprovedFilters:rejected,excludedNonCryptoUnderlyings:nonCrypto.length,nonCryptoExamples:nonCrypto.slice(0,20).map(x=>x.symbol),ambiguousGasMetadata:ambiguousGas,
         filterRule:"exclude stablecoin and non-crypto underlyings; include last price <= 30 USD; missing/nonpositive price rejected",
         sampleSymbols:markets.slice(0,5).map(x=>x.symbol)};
       results.push(row);
