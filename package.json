@@ -1,0 +1,13 @@
+{
+  "name": "futures-scan",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test scripts/test-*.mjs",
+    "scan": "node scripts/scan-long.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2"
+  }
+}
