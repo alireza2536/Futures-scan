@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { filterInitialUniverse, initialEntryDecision, normalizeBaseAsset } from "./initial-filter.mjs";
 
 test("USD stablecoins are rejected before data retrieval", () => {
-  for (const base of ["USDT", "USDC", "DAI", "USDE", "USD1", "PYUSD", "RLUSD", "FRAX", "CRVUSD"]) {
+  for (const base of ["USDT", "USDC", "DAI", "USDE", "USD1", "PYUSD", "RLUSD", "FRAX", "CRVUSD", "USDC.E", "USDTB"]) {
     assert.equal(initialEntryDecision(base, 1).reason, "USD_STABLECOIN", base);
   }
 });
