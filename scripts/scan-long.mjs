@@ -121,7 +121,7 @@ async function mapLimit(items, limit, worker) {
 }
 
 async function fetchTimeframeHistory(item, timeframe) {
-  const count = CANDLE_COUNT_BY_TIMEFRAME[timeframe];
+  const count = CANDLE_COUNT_BY_TIMEFRAME[timeframe] + 1;
   if (!count) throw new Error(`Unsupported selected timeframe: ${timeframe}`);
   if (item.exchange === "OKX") {
     return fetchOkxHistory({
