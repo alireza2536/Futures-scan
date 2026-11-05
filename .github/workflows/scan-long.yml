@@ -30,8 +30,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Test indicator and strategy formulas
+      - name: Test initial universe gate, indicators and strategy formulas
         run: |
+          node --test scripts/test-initial-filter.mjs
           node --test scripts/test-indicators.mjs
           node --test scripts/test-strategy.mjs
       - name: Scan selected futures exchanges
