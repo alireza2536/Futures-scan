@@ -45,40 +45,37 @@ export function calculateCCI(bars, length) {
   return output;
 }
 
-// TradingView-style rolling VWAP: sum(typical price * volume) / sum(volume)
-// over the supplied candle window. This is not session-reset VWAP.
-export function calculateVWAP(bars, length = bars?.length) {
-  if (!Number.isInteger(length) || length < 1) throw new Error("VWAP length must be a positive integer");
-  assertBars(bars, length);
+// Session VWAP resets at 00:00 UTC for each UTC calendar day.
+export function calculateVWAP(bars) {
+  assertBars(bars, 1);
   const output = Array(bars.length).fill(null);
+  let sessionDay = null;
   let pv = 0;
   let volume = 0;
-  const queue = [];
   for (let i = 0; i < bars.length; i += 1) {
     const bar = bars[i];
-    const typical = (bar.high + bar.low + bar.close) / 3;
-    const weighted = typical * bar.volume;
-    queue.push({ weighted, volume: bar.volume });
-    pv += weighted;
-    volume += bar.volume;
-    if (queue.length > length) {
-      const removed = queue.shift();
-      pv -= removed.weighted;
-      volume -= removed.volume;
+    const day = new Date(bar.timestamp).toISOString().slice(0, 10);
+    if (day !== sessionDay) {
+      sessionDay = day;
+      pv = 0;
+      volume = 0;
     }
-    if (queue.length === length) output[i] = volume === 0 ? null : pv / volume;
+    const typical = (bar.high + bar.low + bar.close) / 3;
+    pv += typical * bar.volume;
+    volume += bar.volume;
+    output[i] = volume === 0 ? null : pv / volume;
   }
   return output;
 }
 
-export function calculateLatestIndicators(bars, { emaLength = 500, cciLength = 1200, vwapLength = bars?.length } = {}) {
-  assertBars(bars, Math.max(emaLength, 21, cciLength, vwapLength));
+export function calculateLatestIndicators(bars, { emaLength = 500, cciLength = 1200 } = {}) {
+  assertBars(bars, Math.max(emaLength, 21, cciLength));
   const closes = bars.map(bar => bar.close);
   const ema9 = calculateEMA(closes, 9);
   const ema21 = calculateEMA(closes, 21);
   const ema = calculateEMA(closes, emaLength);
   const cci = calculateCCI(bars, cciLength);
-  const vwap = calculateVWAP(bars, vwapLength);
+  const vwap = calculateVWAP(bars);
   const last = bars.length - 1;
   return {
     timestamp: bars[last].timestamp,
