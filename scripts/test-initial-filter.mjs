@@ -18,6 +18,11 @@ test("price exactly 30 and below are allowed", () => {
   assert.equal(initialEntryDecision("ALT", 0.001).allowed, true);
 });
 
+test("multiplier-denominated contracts are compared by underlying coin price", () => {
+  assert.equal(initialEntryDecision("SHIB", 30000, 30, "1000SHIB-USDT-SWAP").allowed, true);
+  assert.equal(initialEntryDecision("SHIB", 30001, 30, "1000SHIB-USDT-SWAP").reason, "PRICE_ABOVE_30_USDT");
+});
+
 test("missing or invalid price fails closed", () => {
   assert.equal(initialEntryDecision("ALT", null).reason, "PRICE_UNAVAILABLE");
   assert.equal(initialEntryDecision("ALT", 0).reason, "PRICE_UNAVAILABLE");
