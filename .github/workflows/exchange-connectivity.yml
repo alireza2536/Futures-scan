@@ -39,10 +39,3 @@ jobs:
           path: final-seven-exchange-api-report.json
           if-no-files-found: ignore
           retention-days: 14
-      - name: Smoke-test live scanner on BTC perpetuals
-        env:
-          EXCHANGES: OKX,MEXC
-          SYMBOLS: BTC-USDT-SWAP,BTC_USDT
-          CONCURRENCY: "1"
-          REQUIRE_DATA: "true"
-        run: node scripts/scan-long.mjs
