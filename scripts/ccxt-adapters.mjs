@@ -65,15 +65,16 @@ async function fetchWeexHistory(symbol,timeframe,count){
   if(bars.length<count) throw new Error(`WEEX ${timeframe}: ${bars.length}/${count} valid candles`);
   return bars.slice(-count);
 }
-async function fetchHtxHistory(timeframe,count){
+async function fetchHtxHistory(symbol,timeframe,count){
   if(timeframe==="2h"){
-    const hourly=await fetchHtxHistory("1h",count*2+4);
+    const hourly=await fetchHtxHistory(symbol,"1h",count*2+4);
     const bars=aggregateHourlyTo2h(hourly);
     if(bars.length<count) throw new Error(`HTX 2h aggregation: ${bars.length}/${count}`);
     return bars.slice(-count);
   }
   const period={"5m":"5min","15m":"15min","1h":"60min","4h":"4hour","1d":"1day"}[timeframe];
-  const params=new URLSearchParams({contract_code:"BTC-USDT",period,size:String(Math.min(2000,count+2))});
+  const contractCode=symbol.includes("/")?symbol.split("/")[0]+"-"+symbol.split("/")[1].split(":")[0]:symbol;
+  const params=new URLSearchParams({contract_code:contractCode,period,size:String(Math.min(2000,count+2))});
   const payload=await jsonRequest(`https://api.hbdm.com/linear-swap-ex/market/history/kline?${params}`);
   if(payload.status!=="ok"||!Array.isArray(payload.data)) throw new Error(`HTX kline rejected: ${payload["err-msg"]??payload.status}`);
   const bars=dedupeSort(payload.data.map(x=>normalizeBar(x.id,x.open,x.high,x.low,x.close,x.vol)));
@@ -103,9 +104,9 @@ async function fetchKucoinHistory(client,symbol,timeframe,count){
   if(bars.length<count) throw new Error(`KuCoin ${timeframe}: ${bars.length}/${count} valid candles`);
   return bars.slice(-count);
 }
-async function fetchXtHistory(timeframe,count){
+async function fetchXtHistory(symbol,timeframe,count){
   if(timeframe==="2h"){
-    const hourly=await fetchXtHistory("1h",count*2+4);
+    const hourly=await fetchXtHistory(symbol,"1h",count*2+4);
     const bars=aggregateHourlyTo2h(hourly);
     if(bars.length<count) throw new Error(`XT 2h aggregation: ${bars.length}/${count}`);
     return bars.slice(-count);
@@ -116,7 +117,8 @@ async function fetchXtHistory(timeframe,count){
   let cursor=Math.floor((Date.now()-intervalMs*(count+4))/intervalMs)*intervalMs;
   for(let page=0;page<5&&collected.size<count;page+=1){
     const end=Math.min(Date.now(),cursor+intervalMs*1499);
-    const params=new URLSearchParams({symbol:"btc_usdt",interval,startTime:String(cursor),endTime:String(end),limit:"1500"});
+    const xtSymbol=symbol.includes("/")?symbol.split("/")[0]+"_"+symbol.split("/")[1].split(":")[0]:symbol;
+    const params=new URLSearchParams({symbol:xtSymbol.toLowerCase(),interval,startTime:String(cursor),endTime:String(end),limit:"1500"});
     const payload=await jsonRequest(`https://fapi.xt.com/future/market/v1/public/q/kline?${params}`);
     if(payload.returnCode!==0||!Array.isArray(payload.result)) throw new Error(`XT kline rejected: ${payload.msgInfo??payload.returnCode}`);
     const bars=payload.result.map(x=>normalizeBar(x.t,x.o,x.h,x.l,x.c,x.a));
@@ -157,9 +159,9 @@ export async function fetchCcxtHistory({client,symbol,timeframe,count=1203}){
   if(!TF[timeframe]) throw new Error(`Unsupported timeframe: ${timeframe}`);
   if(!Number.isInteger(count)||count<2||count>5000) throw new Error("count must be 2..5000");
   if(client.id==="weex") return fetchWeexHistory(symbol,timeframe,count);
-  if(client.id==="htx") return fetchHtxHistory(timeframe,count);
+  if(client.id==="htx") return fetchHtxHistory(client.market(symbol).id,timeframe,count);
   if(client.id==="kucoinfutures") return fetchKucoinHistory(client,symbol,timeframe,count);
-  if(client.id==="xt") return fetchXtHistory(timeframe,count);
+  if(client.id==="xt") return fetchXtHistory(client.market(symbol).id,timeframe,count);
   const intervalMs=TIMEFRAMES[timeframe].seconds*1000;
   const collected=new Map();
   let since=Math.floor((Date.now()-intervalMs*(count+8))/intervalMs)*intervalMs;
