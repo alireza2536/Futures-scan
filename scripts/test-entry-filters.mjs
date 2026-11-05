@@ -26,3 +26,33 @@ test("rejects missing or invalid prices instead of admitting the symbol", () => 
   assert.equal(evaluateEntryEligibility({ baseAsset: "ADA", lastPrice: null }).reason,
     "INVALID_OR_MISSING_PRICE");
 });
+
+test("excludes known commodity underlyings", () => {
+  for (const baseAsset of ["XAU", "USOIL", "TUNGSTEN"]) {
+    assert.deepEqual(evaluateEntryEligibility({ baseAsset, lastPrice: 10 }), {
+      eligible: false, reason: "NON_CRYPTO_UNDERLYING"
+    });
+  }
+});
+
+test("excludes tokenized equities and equity indices", () => {
+  for (const baseAsset of ["ANTHROPIC", "APPSTOCK", "NIO", "LUXSHARE", "SINOCERA", "CCTC", "JP225"]) {
+    assert.deepEqual(evaluateEntryEligibility({ baseAsset, lastPrice: 10 }), {
+      eligible: false, reason: "NON_CRYPTO_UNDERLYING"
+    });
+  }
+});
+
+test("excludes exchange synthetic FX and index identifiers", () => {
+  for (const baseAsset of ["NCSINIFTYBK2USD", "NCFXUSD2TWD", "EURUSD"]) {
+    assert.deepEqual(evaluateEntryEligibility({ baseAsset, lastPrice: 10 }), {
+      eligible: false, reason: "NON_CRYPTO_UNDERLYING"
+    });
+  }
+});
+
+test("continues to admit ordinary crypto assets under the price ceiling", () => {
+  for (const baseAsset of ["BTC", "ETH", "ADA", "BR", "DOGE"]) {
+    assert.equal(evaluateEntryEligibility({ baseAsset, lastPrice: 10 }).eligible, true);
+  }
+});
