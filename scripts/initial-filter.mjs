@@ -1,0 +1,52 @@
+const USD_STABLECOIN_BASES = new Set([
+  "USDT", "USDC", "USDE", "USDS", "USDD", "USDP", "DAI", "USD1", "USDG",
+  "PYUSD", "RLUSD", "FDUSD", "TUSD", "GUSD", "GHO", "USDF", "USDT0",
+  "BUSD", "UST", "USTC", "FRAX", "CRVUSD", "MIM", "LUSD", "SUSD",
+  "DOLA", "ALUSD", "FEI", "EUSD", "USDK", "USDJ", "USN", "USDX",
+  "USD0", "USDB", "USDA", "USDH", "USDL", "USDQ", "USDZ", "USX"
+]);
+
+export function normalizeBaseAsset(value) {
+  let base = String(value ?? "").trim().toUpperCase();
+  for (const multiplier of ["1000000", "100000", "10000", "1000"]) {
+    if (base.startsWith(multiplier) && base.length > multiplier.length) {
+      base = base.slice(multiplier.length);
+      break;
+    }
+  }
+  return base;
+}
+
+export function initialEntryDecision(baseAsset, price, maxPrice = 30) {
+  const base = normalizeBaseAsset(baseAsset);
+  if (USD_STABLECOIN_BASES.has(base)) {
+    return { allowed: false, reason: "USD_STABLECOIN", price: null };
+  }
+  const last = Number(price);
+  if (!Number.isFinite(last) || last <= 0) {
+    return { allowed: false, reason: "PRICE_UNAVAILABLE", price: null };
+  }
+  if (last > maxPrice) {
+    return { allowed: false, reason: "PRICE_ABOVE_30_USDT", price: last };
+  }
+  return { allowed: true, reason: "ALLOWED", price: last };
+}
+
+export function filterInitialUniverse(markets, tickerMap, maxPrice = 30) {
+  const result = { allowed: [], rejected: [], counts: {
+    candidates: markets.length, allowed: 0, stablecoin: 0, abovePrice: 0, priceUnavailable: 0
+  }};
+  for (const market of markets) {
+    const decision = initialEntryDecision(market.baseAsset, tickerMap.get(market.symbol), maxPrice);
+    if (decision.allowed) {
+      result.allowed.push({ ...market, initialPrice: decision.price });
+      result.counts.allowed += 1;
+    } else {
+      result.rejected.push({ ...market, reason: decision.reason, initialPrice: decision.price });
+      if (decision.reason === "USD_STABLECOIN") result.counts.stablecoin += 1;
+      else if (decision.reason === "PRICE_ABOVE_30_USDT") result.counts.abovePrice += 1;
+      else result.counts.priceUnavailable += 1;
+    }
+  }
+  return result;
+}
