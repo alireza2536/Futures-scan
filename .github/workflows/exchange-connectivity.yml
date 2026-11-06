@@ -25,7 +25,7 @@ jobs:
         if: always() && hashFiles('final-six-exchange-api-report.json') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: final-seven-exchange-api-report
+          name: final-six-exchange-api-report
           path: final-six-exchange-api-report.json
           if-no-files-found: ignore
           retention-days: 14
