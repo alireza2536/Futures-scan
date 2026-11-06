@@ -2,7 +2,7 @@ import ccxt from "ccxt";
 import { TIMEFRAMES, aggregateHourlyTo2h, aggregateHourlyTo1d } from "./market-data.mjs";
 
 const EXCHANGE_IDS = Object.freeze({
-  BINGX: "bingx", WEEX: "weex", HTX: "htx", KUCOIN: "kucoinfutures", XT: "xt"
+  BINGX: "bingx", WEEX: "weex", KUCOIN: "kucoinfutures", XT: "xt"
 });
 const TF = Object.freeze({ "5m":"5m", "15m":"15m", "1h":"1h", "2h":"2h", "4h":"4h", "1d":"1d" });
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
@@ -108,43 +108,6 @@ async function fetchWeexHistory(symbol,timeframe,count){
   if(bars.length<count) throw new Error(`WEEX ${timeframe}: ${bars.length}/${count} valid candles`);
   return bars.slice(-count);
 }
-async function fetchHtxHistory(symbol,timeframe,count){
-  if(timeframe==="1d"){
-    const hourly=await fetchHtxHistory(symbol,"1h",count*24+72);
-    const bars=aggregateHourlyTo1d(hourly);
-    if(bars.length<count) throw new Error("HTX UTC 1d aggregation: "+bars.length+"/"+count+" complete daily candles from hourly history");
-    return bars.slice(-count);
-  }
-  if(timeframe==="2h"){
-    const hourly=await fetchHtxHistory(symbol,"1h",count*2+4);
-    const bars=aggregateHourlyTo2h(hourly);
-    if(bars.length<count) throw new Error(`HTX 2h aggregation: ${bars.length}/${count}`);
-    return bars.slice(-count);
-  }
-  const period={"5m":"5min","15m":"15min","1h":"60min","4h":"4hour","1d":"1day"}[timeframe];
-  const intervalMs=TIMEFRAMES[timeframe].seconds*1000;
-  const collected=new Map();
-  let cursor=Math.floor((Date.now()-intervalMs*(count+4))/intervalMs)*intervalMs;
-  for(let page=0;page<Math.ceil(count/1800)+3&&collected.size<count;page+=1){
-    const chunk=Math.min(1800,count-collected.size+4);
-    const end=cursor+intervalMs*(chunk-1);
-    const params=new URLSearchParams({contract_code:symbol,period});
-    if(count<=2000) params.set("size",String(count+2));
-    else {params.set("from",String(Math.floor(cursor/1000)));params.set("to",String(Math.floor(end/1000)));}
-    const payload=await jsonRequest(`https://api.hbdm.com/linear-swap-ex/market/history/kline?${params}`);
-    if(payload.status!=="ok"||!Array.isArray(payload.data)) throw new Error(`HTX kline rejected: ${payload["err-msg"]??payload.status}`);
-    const bars=dedupeSort(payload.data.map(x=>normalizeBar(x.id,x.open,x.high,x.low,x.close,x.vol)));
-    if(!bars.length) break;
-    for(const b of bars) collected.set(b.timestamp,b);
-    const newest=Math.max(...bars.map(b=>b.timestamp));
-    const next=newest+intervalMs;
-    if(next<=cursor) break;
-    cursor=next;
-  }
-  const bars=dedupeSort([...collected.values()]);
-  if(bars.length<count) throw new Error(`HTX ${timeframe}: API returned ${bars.length}/${count} candles (historical range/availability)`);
-  return bars.slice(-count);
-}
 async function fetchKucoinHistory(client,symbol,timeframe,count){
   const granularity={"5m":5,"15m":15,"1h":60,"2h":120,"4h":240,"1d":1440}[timeframe];
   const market=client.market(symbol);
@@ -224,7 +187,6 @@ export async function fetchCcxtHistory({client,symbol,timeframe,count=1203}){
   if(!Number.isInteger(count)||count<2||count>5000) throw new Error("count must be 2..5000");
   if(client.id==="bingx") return fetchBingxHistory(client.market(symbol).id,timeframe,count);
   if(client.id==="weex") return fetchWeexHistory(symbol,timeframe,count);
-  if(client.id==="htx") return fetchHtxHistory(client.market(symbol).id,timeframe,count);
   if(client.id==="kucoinfutures") return fetchKucoinHistory(client,symbol,timeframe,count);
   if(client.id==="xt") return fetchXtHistory(client.market(symbol).id,timeframe,count);
   const intervalMs=TIMEFRAMES[timeframe].seconds*1000;
