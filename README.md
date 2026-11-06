@@ -15,8 +15,8 @@
 
 ## وضعیت پیاده‌سازی فعلی
 
-- **آداپترهای متصل در کد:** OKX و MEXC با پیاده‌سازی بومی؛ BingX، WEEX، HTX، KuCoin Futures و XT با آداپترهای اختصاصی متصل به موتور اسکن.
-- **۷ صرافی کاندید پروژه:** MEXC، BingX، OKX، WEEX، HTX، KuCoin و XT. آزمون زنده واقعی هر هفت صرافی در هر شش تایم‌فریم با موفقیت ۴۲ از ۴۲ مورد را ثبت کرده است؛ در هر مورد ۱۲۰۱ کندل بسته دریافت و اندیکاتورها محاسبه شده‌اند (۵ نوامبر ۲۰۲۶).
+- **آداپترهای متصل در کد:** OKX و MEXC با پیاده‌سازی بومی؛ BingX، WEEX، KuCoin Futures و XT با آداپترهای اختصاصی متصل به موتور اسکن.
+- **۷ صرافی کاندید پروژه:** MEXC، BingX، OKX، WEEX، KuCoin و XT. آزمون زنده واقعی هر شش صرافی در هر شش تایم‌فریم با موفقیت ۳۶ از ۳۶ مورد را ثبت کرده است؛ در هر مورد ۱۲۰۱ کندل بسته دریافت و اندیکاتورها محاسبه شده‌اند (۵ نوامبر ۲۰۲۶).
 - **تایم‌فریم‌های تعریف‌شده:** 5m، 15m، 1h، 2h، 4h و 1d.
 - **تاریخچه موردنیاز:** ۱۲۰۱ کندل بسته برای محاسبه CCI(1200)، EMA(500) و VWAP جلسه UTC.
 - **اندیکاتورها:** EMA9، EMA21، EMA500، CCI(1200) و VWAP روزانه با ریست ساعت ۰۰:۰۰ UTC؛ مقدارها و زمان کندل مرجع برای هر تایم‌فریم جداگانه گزارش می‌شود.
@@ -38,7 +38,7 @@ npm run scan
 ```
 
 متغیرهای اختیاری:
-- `EXCHANGES=OKX,MEXC,BINGX,WEEX,HTX,KUCOIN,XT` (پیش‌فرض: هر هفت صرافی تأییدشده)
+- `EXCHANGES=OKX,MEXC,BINGX,WEEX,KUCOIN,XT` (پیش‌فرض: هر شش صرافی تأییدشده)
 - `CONCURRENCY=3` (محدوده مجاز ۱ تا ۱۰)
 - `MAX_SYMBOLS=0` (صفر یعنی بدون سقف؛ محدودیت فقط برای تست و پس از فیلترها)
 - `SYMBOLS=BTC-USDT-SWAP,BTC_USDT` (فقط برای تست نمادهای مشخص)
@@ -48,9 +48,9 @@ npm run scan
 ## فایل‌های اصلی
 
 - `scripts/market-data.mjs`: دریافت و نرمال‌سازی کندل‌های OKX و MEXC
-- `scripts/ccxt-adapters.mjs`: آداپترهای BingX، WEEX، HTX، KuCoin Futures و XT
-- `scripts/test-seven-exchanges-live.mjs`: آزمون زنده هر هفت صرافی در شش تایم‌فریم
-- `scripts/test-seven-exchange-universe.mjs`: ممیزی کل قراردادهای فعال USDT و پوشش قیمت هر هفت صرافی
+- `scripts/ccxt-adapters.mjs`: آداپترهای BingX، WEEX، KuCoin Futures و XT
+- `scripts/test-seven-exchanges-live.mjs`: آزمون زنده هر شش صرافی در شش تایم‌فریم
+- `scripts/test-seven-exchange-universe.mjs`: ممیزی کل قراردادهای فعال USDT و پوشش قیمت هر شش صرافی
 - `scripts/indicators.mjs`: EMA، CCI و VWAP
 - `scripts/entry-filters.mjs`: فیلترهای قطعی ورود نماد
 - `scripts/scan-long.mjs`: نام فایل برای حفظ سازگاری workflow نگه داشته شده؛ اکنون فقط داده و اندیکاتورها را جمع‌آوری می‌کند.
@@ -60,7 +60,7 @@ npm run scan
 
 ## محدودیت‌های باقی‌مانده
 
-- آزمون زنده ۴۲/۴۲ برای دریافت تاریخچه و محاسبه اندیکاتورها موفق شده است. آزمون فهرست کامل بازار نیز برای هر ۷ صرافی موفق شده است: مجموعاً ۵٬۶۹۷ قرارداد فعال و یکتا بررسی شد؛ ۳٬۷۲۸ قرارداد پس از فیلترهای فعلی واجد شرایط بودند. ۱۹ قرارداد BingX و WEEX قیمت معتبر نداشتند و به‌درستی از ورود به اسکن کنار گذاشته شدند.
+- آزمون زنده ۴۲/۴۲ برای دریافت تاریخچه و محاسبه اندیکاتورها موفق شده است. آزمون فهرست کامل بازار نیز برای هر ۶ صرافی موفق شده است: مجموعاً ۵٬۶۹۷ قرارداد فعال و یکتا بررسی شد؛ ۳٬۷۲۸ قرارداد پس از فیلترهای فعلی واجد شرایط بودند. ۱۹ قرارداد BingX و WEEX قیمت معتبر نداشتند و به‌درستی از ورود به اسکن کنار گذاشته شدند.
 - مقایسه عددی EMA، CCI و VWAP با TradingView هنوز انجام نشده است.
 - اتصال Neon در محیط اجرا با DATABASE_URL هنوز پیکربندی و آزمون نشده است.
 - فیلتر شناخته‌شدهٔ غیررمزارزی در کد و تست‌های واحد اعمال شده است؛ با این حال، کامل‌بودن فهرست نمادهای غیررمزارزی برای تمام بازارهای هر صرافی هنوز باید با ممیزی و گزارش واقعی تأیید شود.
@@ -89,6 +89,6 @@ Run the live 5m API check for BTC USDT perpetual on the two currently implemente
 npm run test:5m:live
 ```
 
-The live check needs outbound access to both exchange APIs. The latest all-seven live run passed all 42 exchange/timeframe combinations, including 5m, with 1,201 closed candles and finite indicator outputs.
+The live check needs outbound access to both exchange APIs. The latest all-six live run passed all 36 exchange/timeframe combinations, including 5m, with 1,201 closed candles and finite indicator outputs.
 
-- The seven-candidate exchange validation workflow also checks 5m history for MEXC, BingX, OKX, WEEX, HTX, KuCoin Futures, and XT: 1,201 closed candles, UTC alignment, no gaps, freshness, and finite EMA9/EMA21/EMA500/CCI1200/VWAP outputs. A venue is not marked passed unless its 5m core check succeeds.
+- The seven-candidate exchange validation workflow also checks 5m history for MEXC, BingX, OKX, WEEX, KuCoin Futures, and XT: 1,201 closed candles, UTC alignment, no gaps, freshness, and finite EMA9/EMA21/EMA500/CCI1200/VWAP outputs. A venue is not marked passed unless its 5m core check succeeds.
