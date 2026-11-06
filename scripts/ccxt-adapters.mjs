@@ -45,8 +45,11 @@ async function fetchBingxHistory(symbol,timeframe,count){
   let cursor=Math.floor((Date.now()-intervalMs*(count+5))/intervalMs)*intervalMs;
   const maxPages=Math.ceil(count/950)+4;
   for(let page=0;page<maxPages&&collected.size<count;page+=1){
+    const now=Date.now();
+    // Do not issue a final request with startTime beyond the exchange's current endTime.
+    if(cursor>now) break;
     const startTime=cursor;
-    const endTime=Math.min(Date.now(),startTime+intervalMs*949);
+    const endTime=Math.min(now,startTime+intervalMs*949);
     const params=new URLSearchParams({
       symbol:pair,interval:timeframe,
       startTime:String(startTime),endTime:String(endTime),
@@ -69,7 +72,8 @@ async function fetchBingxHistory(symbol,timeframe,count){
     const next=newest+intervalMs;
     if(next<=cursor) throw new Error("BingX pagination did not advance");
     cursor=next;
-    if(bars.length<2) break;
+    // The latest returned candle may be the current interval; there is no later page yet.
+    if(cursor>Date.now()||bars.length<2) break;
     await sleep(1200);
   }
   const bars=dedupeSort([...collected.values()]);
