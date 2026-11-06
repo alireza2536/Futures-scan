@@ -86,5 +86,5 @@ try{
 }
 const passed=results.filter(x=>x.status==="PASS"||x.status==="PASS_WITH_MISSING_TICKERS_EXCLUDED").length;
 const failed=results.length-passed;
-console.log(JSON.stringify({test:"all-seven-full-usdt-perpetual-universe-and-ticker-audit",passed,failed,total:results.length,generatedAt:new Date().toISOString()}));
+console.log(JSON.stringify({test:"all-six-full-usdt-perpetual-universe-and-ticker-audit",passed,failed,total:results.length,generatedAt:new Date().toISOString()}));
 if(failed)process.exitCode=1;
