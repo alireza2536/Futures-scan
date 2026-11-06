@@ -17,15 +17,15 @@ jobs:
         run: node --test scripts/test-indicators.mjs
       - name: Run strict long-strategy tests
         run: node --test scripts/test-strategy.mjs
-      - name: Install CCXT adapters for final seven exchanges
+      - name: Install CCXT adapters for final six exchanges
         run: npm install --no-save --no-package-lock ccxt
-      - name: Test final seven exchanges across all six timeframes, including 5m
+      - name: Test final six exchanges across all six timeframes, including 5m
         run: node scripts/check-final-seven-exchanges.mjs
-      - name: Upload final seven-exchange API report
-        if: always() && hashFiles('final-seven-exchange-api-report.json') != ''
+      - name: Upload final six-exchange API report
+        if: always() && hashFiles('final-six-exchange-api-report.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: final-seven-exchange-api-report
-          path: final-seven-exchange-api-report.json
+          path: final-six-exchange-api-report.json
           if-no-files-found: ignore
           retention-days: 14
