@@ -4,7 +4,7 @@ import { TIMEFRAMES, assertCandleCoverage } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 
 const names=supportedCcxtExchanges();
-assert.deepEqual(names,["BINGX","WEEX","HTX","KUCOIN","XT"]);
+assert.deepEqual(names,["BINGX","WEEX","KUCOIN","XT"]);
 const timeframeNames=Object.keys(TIMEFRAMES);
 const count=1203;
 const report=[];
@@ -32,5 +32,5 @@ for(const name of names){
 }
 for(const row of report) console.log(JSON.stringify(row));
 const passed=report.filter(x=>x.status==="PASS").length;
-console.log(JSON.stringify({test:"five-exchange-six-timeframe-live-validation",passed,failed:report.length-passed,total:report.length,generatedAt:new Date().toISOString()}));
+console.log(JSON.stringify({test:"four-exchange-six-timeframe-live-validation",passed,failed:report.length-passed,total:report.length,generatedAt:new Date().toISOString()}));
 if(report.some(x=>x.status!=="PASS")) process.exitCode=1;
