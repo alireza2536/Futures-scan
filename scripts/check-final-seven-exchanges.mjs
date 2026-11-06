@@ -7,7 +7,6 @@ const EXCHANGES = [
   { label: "BingX", id: "bingx" },
   { label: "OKX", id: "okx" },
   { label: "WEEX", id: "weex" },
-  { label: "HTX", id: "htx" },
   { label: "KuCoin", id: "kucoinfutures" },
   { label: "XT", id: "xt" }
 ];
@@ -143,52 +142,7 @@ async function fetchWeex1hHistory(market, required) {
   const freshnessFloor=Math.floor(Date.now()/duration)*duration-2*duration;
   return {bars,pages,complete:bars.length>=required,fresh:latest>=freshnessFloor,latest};
 }
-async function fetchHtxHistory(contractCode, timeframe, required) {
-  const periods = { "5m": "5min", "15m": "15min", "1h": "60min", "2h": "2hour", "4h": "4hour", "1d": "1day" };
-  const duration = MS[timeframe] / 1000;
-  const target = required + 8;
-  const now = Math.floor(Date.now()/1000);
-  const lastClosed = Math.floor(now/duration)*duration - duration;
-  const firstNeeded = lastClosed - (target-1)*duration;
-  const byTime = new Map();
-  let pages = 0;
-  const ranges = target <= 1900
-    ? [{ from: null, to: null, size: target }]
-    : Array.from({ length: Math.ceil(target/1900) }, (_,i) => {
-        const from = firstNeeded + i*1900*duration;
-        return { from, to: Math.min(lastClosed, from+1899*duration), size: null };
-      });
-  for (const range of ranges) {
-    const url = new URL("https://api.hbdm.com/linear-swap-ex/market/history/kline");
-    const params = { contract_code: contractCode, period: periods[timeframe] };
-    if (range.size) params.size = String(Math.min(2000, range.size));
-    else { params.from = String(range.from); params.to = String(range.to); }
-    url.search = new URLSearchParams(params).toString();
-    const payload = await getJson(url);
-    if (payload.status !== "ok" || !Array.isArray(payload.data)) {
-      throw new Error(`HTX ${timeframe} history rejected: ${payload.err_msg ?? payload.status}`);
-    }
-    for (const row of payload.data) {
-      const bar = {
-        timestamp: Number(row.id)*1000, open: Number(row.open), high: Number(row.high), low: Number(row.low),
-        close: Number(row.close), volume: Number(row.vol ?? row.amount)
-      };
-      if (![bar.timestamp,bar.open,bar.high,bar.low,bar.close,bar.volume].every(Number.isFinite)) continue;
-      if (bar.timestamp + MS[timeframe] > Date.now()) continue;
-      if (bar.high < Math.max(bar.open,bar.close,bar.low) || bar.low > Math.min(bar.open,bar.close) || bar.volume < 0) continue;
-      byTime.set(bar.timestamp,bar);
-    }
-    pages += 1;
-    await sleep(300);
-  }
-  const bars = [...byTime.values()].sort((a,b)=>a.timestamp-b.timestamp).slice(-required);
-  if (bars.length < required) throw new Error(`HTX returned only ${bars.length}/${required} closed valid ${timeframe} candles across ${pages} pages`);
-  const latest = bars.at(-1).timestamp;
-  const freshnessFloor = Math.floor(Date.now()/MS[timeframe])*MS[timeframe]-2*MS[timeframe];
-  return { bars, pages, complete: bars.length>=required, fresh: latest>=freshnessFloor, latest };
-}
 async function fetchVenueHistory(config, exchange, market, timeframe, required) {
-  if (config.id === "htx") return fetchHtxHistory(market.id || market.symbol.replace("/", "-").replace(":USDT", ""), timeframe, required);
   if (config.id === "weex" && timeframe === "1h") return fetchWeex1hHistory(market, required);
   return fetchHistory(exchange, market.symbol, timeframe, required);
 }
