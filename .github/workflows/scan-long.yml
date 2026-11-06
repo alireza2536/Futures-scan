@@ -44,6 +44,7 @@ jobs:
           MAX_SYMBOLS: ${{ inputs.max_symbols }}
           CONCURRENCY: ${{ inputs.concurrency }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REQUIRE_DATA: "true"
         run: node scripts/scan-long.mjs
       - name: Upload scan results
         if: always()
