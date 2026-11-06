@@ -89,7 +89,10 @@ export async function fetchMexcHistory({base="https://api.mexc.com",symbol="BTC_
   const collected=new Map();
   let cursor=Math.floor((Date.now()/1000-intervalSeconds*(count+5))/intervalSeconds)*intervalSeconds;
   for(let page=0;page<12&&collected.size<count;page+=1){
-    const pageEnd=Math.min(Math.floor(Date.now()/1000),cursor+intervalSeconds*999);
+    const nowSeconds=Math.floor(Date.now()/1000);
+    // Avoid sending an invalid range when the previous page reached the current candle.
+    if(cursor>nowSeconds) break;
+    const pageEnd=Math.min(nowSeconds,cursor+intervalSeconds*999);
     const params=new URLSearchParams({interval:spec.mexc,start:String(cursor),end:String(pageEnd)});
     const payload=await requestJson(`${base}/api/v1/contract/kline/${encodeURIComponent(symbol)}?${params}`);
     if(payload.success!==true) throw new Error(`MEXC kline rejected: ${payload.message??payload.code}`);
@@ -100,6 +103,7 @@ export async function fetchMexcHistory({base="https://api.mexc.com",symbol="BTC_
     const next=Math.floor(newest/1000)+intervalSeconds;
     if(next<=cursor) break;
     cursor=next;
+    if(cursor>Math.floor(Date.now()/1000)) break;
   }
   const bars=dedupeAndSort([...collected.values()]);
   if(bars.length<count) throw new Error(`MEXC returned only ${bars.length}/${count} unique valid ${interval} bars for ${symbol}`);
