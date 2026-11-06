@@ -39,6 +39,7 @@ jobs:
           EXCHANGES: ${{ inputs.exchanges }}
           MAX_SYMBOLS: ${{ inputs.max_symbols }}
           CONCURRENCY: ${{ inputs.concurrency }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: node scripts/scan-long.mjs
       - name: Upload scan results
         if: always()
