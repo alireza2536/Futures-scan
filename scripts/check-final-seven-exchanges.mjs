@@ -364,6 +364,6 @@ const corePassed = report.filter(x=>x.coreStatus==="PASS").length;
 const optionalFull = report.filter(x=>x.optionalStatus==="PASS").length;
 const coreFailed = report.length-corePassed;
 const payload = { generatedAt: new Date().toISOString(), candidateExchanges: EXCHANGES.map(x=>x.label), results: report, summary: { corePassed, coreFailed, optionalFull, total: report.length } };
-await writeFile("final-seven-exchange-api-report.json", JSON.stringify(payload,null,2));
-console.log(`FINAL | CORE=${corePassed}/7 PASS | OPTIONAL_ALL_TIMEFRAMES=${optionalFull}/7 PASS | CORE_FAILED=${coreFailed}`);
+await writeFile("final-six-exchange-api-report.json", JSON.stringify(payload,null,2));
+console.log(`FINAL | CORE=${corePassed}/6 PASS | OPTIONAL_ALL_TIMEFRAMES=${optionalFull}/6 PASS | CORE_FAILED=${coreFailed}`);
 if (corePassed !== 7) process.exitCode = 1;
