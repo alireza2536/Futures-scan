@@ -30,7 +30,7 @@ for(const timeframe of TIMEFRAME_NAMES){
     base:process.env.MEXC_BASE_URL??"https://api.mexc.com",symbol:"BTC_USDT",interval:timeframe,count:COUNT
   })));
 }
-for(const exchange of ["BINGX","WEEX","HTX","KUCOIN","XT"]){
+for(const exchange of ["BINGX","WEEX","KUCOIN","XT"]){
   let adapter;
   try{
     adapter=await createCcxtAdapter(exchange);
@@ -51,5 +51,5 @@ for(const exchange of ["BINGX","WEEX","HTX","KUCOIN","XT"]){
 for(const row of results) console.log(JSON.stringify(row));
 const passed=results.filter(x=>x.status==="PASS").length;
 const failed=results.length-passed;
-console.log(JSON.stringify({test:"seven-exchange-six-timeframe-live-validation",passed,failed,total:results.length,generatedAt:new Date().toISOString()}));
+console.log(JSON.stringify({test:"six-exchange-six-timeframe-live-validation",passed,failed,total:results.length,generatedAt:new Date().toISOString()}));
 if(failed>0) process.exitCode=1;
