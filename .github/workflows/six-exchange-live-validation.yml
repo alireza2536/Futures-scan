@@ -1,4 +1,5 @@
 name: Six-exchange live candle validation
+# Isolated validation run; scanner source remains unchanged.
 
 on:
   push:
