@@ -14,7 +14,6 @@ const EXCHANGES = [
   { id: "weex", label: "WEEX" },
   { id: "kucoinfutures", label: "KuCoin Futures" },
   { id: "coinbaseinternational", label: "Coinbase International" },
-  { id: "htx", label: "HTX" }
 ];
 const INTERVAL_MS = { "15m": 900000, "4h": 14400000, "1d": 86400000 };
 
