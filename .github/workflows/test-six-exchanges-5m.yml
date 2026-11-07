@@ -2,6 +2,11 @@ name: Six Exchange 5m Live Data Test
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/test-six-exchanges-5m.yml'
+      - 'scripts/test-six-exchanges-5m.mjs'
 
 permissions:
   contents: read
