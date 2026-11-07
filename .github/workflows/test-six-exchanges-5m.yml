@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/test-six-exchanges-5m.yml'
       - 'scripts/test-six-exchanges-5m.mjs'
+      - 'package.json'
 
 permissions:
   contents: read
@@ -22,10 +23,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Generate npm lockfile
-        run: npm install --package-lock-only
+          cache: npm
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
+      - name: Verify dependency installation
+        run: npm ls --depth=0
       - name: Run 5m history and indicator test
         run: node scripts/test-six-exchanges-5m.mjs
       - name: Upload results
