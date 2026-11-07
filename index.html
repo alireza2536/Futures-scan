@@ -20,6 +20,8 @@
     .tf[aria-pressed="true"] { color:#fff; border-color:#5ca4ff; background:#174477; box-shadow:inset 0 0 0 1px #5ca4ff; }
     .selected { margin-top:22px; padding:15px 17px; border-radius:13px; background:#0c1626; border:1px solid #27364d; }
     .selected strong { color:#8fc3ff; }
+    .run { display:block; width:100%; margin-top:18px; min-height:54px; border:0; border-radius:13px; color:#fff; background:#1762a8; font-weight:700; }
+    .run:hover { background:#2478c4; }
     .note { margin-top:16px; font-size:13px; color:#91a2ba; }
     @media (max-width:460px) { body{padding:12px} main{padding:20px} .timeframes{grid-template-columns:repeat(2,minmax(0,1fr))} }
   </style>
@@ -27,7 +29,7 @@
 <body>
   <main>
     <h1>اسکن هوشمند ارزها در فیوچرز</h1>
-    <p>تایم‌فریم موردنظر را انتخاب کن. هر تایم‌فریم مستقل است و انتخاب ۵ دقیقه‌ای هیچ شرط لانگ یا شورت جدیدی اضافه نمی‌کند.</p>
+    <p>تایم‌فریم موردنظر را انتخاب کن. انتخاب ۵ دقیقه‌ای فقط داده و اندیکاتورها را برای همان بازه دریافت می‌کند و هیچ شرط جدید لانگ یا شورت اضافه نمی‌کند.</p>
     <section aria-labelledby="timeframe-title">
       <h2 id="timeframe-title">انتخاب تایم‌فریم</h2>
       <div class="timeframes" role="group" aria-label="تایم‌فریم اسکن">
@@ -40,7 +42,8 @@
       </div>
     </section>
     <div class="selected" aria-live="polite">تایم‌فریم انتخاب‌شده: <strong id="selected-timeframe">۵ دقیقه (5m)</strong></div>
-    <div class="note">این صفحه فعلاً رابط انتخاب تایم‌فریم است؛ اجرای اسکن از طریق رابط هنوز به سرویس اجرایی متصل نشده است.</div>
+    <button class="run" id="run-scan" type="button">رفتن به اجرای اسکن امن</button>
+    <div class="note">با زدن دکمه، صفحه اجرای دستی GitHub Actions باز می‌شود. تایم‌فریم انتخابی را در ورودی Timeframe همان صفحه انتخاب کن و سپس Run workflow را بزن. اجرای اسکن فقط با تأیید دستی تو شروع می‌شود؛ هیچ کلید یا رمز GitHub در این صفحه قرار نمی‌گیرد.</div>
   </main>
   <script>
     const labels = {
@@ -50,12 +53,17 @@
     };
     const buttons = [...document.querySelectorAll("[data-timeframe]")];
     const output = document.getElementById("selected-timeframe");
+    let selectedTimeframe = "5m";
     for (const button of buttons) {
       button.addEventListener("click", () => {
+        selectedTimeframe = button.dataset.timeframe;
         for (const item of buttons) item.setAttribute("aria-pressed", String(item === button));
-        output.textContent = labels[button.dataset.timeframe];
+        output.textContent = labels[selectedTimeframe];
       });
     }
+    document.getElementById("run-scan").addEventListener("click", () => {
+      window.location.href = "https://github.com/alireza2536/Futures-scan/actions/workflows/scan-long.yml";
+    });
   </script>
 </body>
 </html>
