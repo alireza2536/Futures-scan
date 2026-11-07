@@ -79,7 +79,7 @@ test("uses exchange metadata to exclude stock, ETF, index and commodity contract
     { underlyingType: "INDEX" },
     { displayNameEn: "Gold Perpetual" }
   ]) {
-    assert.equal(evaluateEntryEligibility({ baseAsset: "BITO", lastPrice: 10, marketInfo }).reason,
+    assert.equal(evaluateEntryEligibility({ baseAsset: "BTC", lastPrice: 10, marketInfo }).reason,
       "NON_CRYPTO_UNDERLYING");
   }
 });
