@@ -16,11 +16,107 @@ export async function persistScanResults(summary) {
     payload jsonb NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
   )`;
-  await sql`ALTER TABLE IF EXISTS daily_cci_states DROP COLUMN IF EXISTS ema500, DROP COLUMN IF EXISTS ema500_timestamp`;
   const id=randomUUID();
   await sql`INSERT INTO futures_scan_snapshots
     (id,generated_at,exchange_count,symbol_count,data_ready_count,partial_count,error_count,payload)
     VALUES (${id},${summary.generatedAt},${summary.exchanges.length},${summary.scanned},
       ${summary.dataReady},${summary.partialData},${summary.dataErrors},${JSON.stringify(summary)}::jsonb)`;
   return {status:"SAVED",id};
+}
+
+let dailyCciSql;
+let dailyCciTableReady;
+async function getDailyCciSql() {
+  if(!process.env.DATABASE_URL) return null;
+  if(!dailyCciSql) {
+    const {neon}=await import("@neondatabase/serverless");
+    dailyCciSql=neon(process.env.DATABASE_URL);
+  }
+  if(!dailyCciTableReady) {
+    dailyCciTableReady=dailyCciSql`CREATE TABLE IF NOT EXISTS daily_cci_states (
+      exchange text NOT NULL,
+      symbol text NOT NULL,
+      last_timestamp bigint NOT NULL,
+      typical_prices jsonb NOT NULL,
+      recent_candles jsonb NOT NULL,
+      ema500 double precision,
+      ema500_timestamp bigint,
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY(exchange,symbol)
+    )`;
+  }
+  await dailyCciTableReady;
+  await dailyCciSql`ALTER TABLE daily_cci_states ADD COLUMN IF NOT EXISTS ema500 double precision`;
+  await dailyCciSql`ALTER TABLE daily_cci_states ADD COLUMN IF NOT EXISTS ema500_timestamp bigint`;
+  return dailyCciSql;
+}
+
+export async function loadDailyCCIState(exchange,symbol) {
+  const sql=await getDailyCciSql();
+  if(!sql) return null;
+  const rows=await sql`SELECT last_timestamp,typical_prices,recent_candles,ema500,ema500_timestamp FROM daily_cci_states WHERE exchange=${exchange} AND symbol=${symbol} LIMIT 1`;
+  if(!rows.length) return null;
+  return {
+    lastTimestamp:Number(rows[0].last_timestamp),
+    typicalPrices:rows[0].typical_prices,
+    recentCandles:rows[0].recent_candles,
+    ema500:rows[0].ema500===null?null:Number(rows[0].ema500),
+    ema500Timestamp:rows[0].ema500_timestamp===null?null:Number(rows[0].ema500_timestamp)
+  };
+}
+
+export async function saveDailyCCIState(exchange,symbol,state) {
+  const sql=await getDailyCciSql();
+  if(!sql) return {status:"SKIPPED_NO_DATABASE_URL"};
+  await sql`INSERT INTO daily_cci_states
+    (exchange,symbol,last_timestamp,typical_prices,recent_candles,ema500,ema500_timestamp)
+    VALUES(${exchange},${symbol},${state.lastTimestamp},${JSON.stringify(state.typicalPrices)}::jsonb,
+      ${JSON.stringify(state.recentCandles)}::jsonb,${state.ema500},${state.ema500Timestamp})
+    ON CONFLICT(exchange,symbol) DO UPDATE SET
+      last_timestamp=EXCLUDED.last_timestamp,
+      typical_prices=EXCLUDED.typical_prices,
+      recent_candles=EXCLUDED.recent_candles,
+      ema500=EXCLUDED.ema500,
+      ema500_timestamp=EXCLUDED.ema500_timestamp,
+      updated_at=now()`;
+  return {status:"SAVED"};
+}
+
+let dailyCciSql;
+let dailyCciTableReady;
+async function getDailyCciSql() {
+  if(!process.env.DATABASE_URL) return null;
+  if(!dailyCciSql) {
+    const {neon}=await import("@neondatabase/serverless");
+    dailyCciSql=neon(process.env.DATABASE_URL);
+  }
+  if(!dailyCciTableReady) {
+    dailyCciTableReady=dailyCciSql`CREATE TABLE IF NOT EXISTS daily_cci_states (
+      exchange text NOT NULL,
+      symbol text NOT NULL,
+      last_timestamp bigint NOT NULL,
+      typical_prices jsonb NOT NULL,
+      recent_candles jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY(exchange,symbol)
+    )`;
+  }
+  await dailyCciTableReady;
+  return dailyCciSql;
+}
+export async function loadDailyCCIState(exchange,symbol) {
+  const sql=await getDailyCciSql();
+  if(!sql) return null;
+  const rows=await sql`SELECT last_timestamp,typical_prices,recent_candles FROM daily_cci_states WHERE exchange=${exchange} AND symbol=${symbol} LIMIT 1`;
+  if(!rows.length) return null;
+  return {lastTimestamp:Number(rows[0].last_timestamp),typicalPrices:rows[0].typical_prices,recentCandles:rows[0].recent_candles};
+}
+export async function saveDailyCCIState(exchange,symbol,state) {
+  const sql=await getDailyCciSql();
+  if(!sql) return {status:"SKIPPED_NO_DATABASE_URL"};
+  await sql`INSERT INTO daily_cci_states(exchange,symbol,last_timestamp,typical_prices,recent_candles)
+    VALUES(${exchange},${symbol},${state.lastTimestamp},${JSON.stringify(state.typicalPrices)}::jsonb,${JSON.stringify(state.recentCandles)}::jsonb)
+    ON CONFLICT(exchange,symbol) DO UPDATE SET last_timestamp=EXCLUDED.last_timestamp,
+      typical_prices=EXCLUDED.typical_prices,recent_candles=EXCLUDED.recent_candles,updated_at=now()`;
+  return {status:"SAVED"};
 }
