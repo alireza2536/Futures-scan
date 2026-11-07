@@ -3,7 +3,7 @@ import { fetchOkxHistory, fetchMexcHistory, assertCandleCoverage } from "./marke
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { createCcxtAdapter, fetchCcxtHistory } from "./ccxt-adapters.mjs";
 
-const REQUIRED = 1201;
+const REQUIRED = 1001;
 const TF = "5m";
 const INTERVAL = 300000;
 const EXCHANGES = ["MEXC", "BINGX", "OKX", "WEEX", "KUCOIN", "XT"];
