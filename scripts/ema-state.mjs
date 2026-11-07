@@ -33,10 +33,16 @@ export function createEmaState(bars, { timeframeMs, length = DEFAULT_EMA_LENGTH 
     previousTimestamp = bar.timestamp;
   }
   const last = bars.at(-1);
+  const alpha = 2 / (length + 1);
+  let value = bars[0].close;
+  const history = [{ timestamp: bars[0].timestamp, close: bars[0].close, value }];
+  for (let i = 1; i < bars.length; i += 1) {
+    value = alpha * bars[i].close + (1 - alpha) * value;
+    history.push({ timestamp: bars[i].timestamp, close: bars[i].close, value });
+  }
   return {
     version: 1, length, timeframeMs, lastTimestamp: last.timestamp,
-    lastClose: last.close, value: calculateSeed(bars.map(bar => bar.close), length),
-    candlesProcessed: bars.length
+    lastClose: last.close, value, candlesProcessed: bars.length, history
   };
 }
 
