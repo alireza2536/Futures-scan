@@ -1,5 +1,5 @@
 import { createCcxtAdapter, supportedCcxtExchanges } from "./ccxt-adapters.mjs";
-import { evaluateEntryEligibility, isNonCryptoBase } from "./entry-filters.mjs";
+import { evaluateEntryEligibility, isNonCryptoMarket } from "./entry-filters.mjs";
 
 const REQUIRED=["OKX","MEXC",...supportedCcxtExchanges()];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -45,7 +45,7 @@ async function mexcUniverse(){
   const rows=Array.isArray(tickers.data)?tickers.data:[tickers.data];
   const prices=new Map(rows.filter(Boolean).map(x=>[x.symbol,Number(x.lastPrice)]));
   return contracts.data.filter(x=>x.quoteCoin==="USDT"&&x.settleCoin==="USDT"&&x.state===0&&x.symbol?.endsWith("_USDT"))
-    .map(x=>({symbol:x.symbol,baseAsset:x.baseCoin,price:prices.get(x.symbol),quote:x.quoteCoin,settle:x.settleCoin,active:true}));
+    .map(x=>({symbol:x.symbol,baseAsset:x.baseCoin,price:prices.get(x.symbol),quote:x.quoteCoin,settle:x.settleCoin,active:true,marketInfo:x}));
 }
 const clients=[];
 const results=[];
@@ -64,9 +64,9 @@ try{
       const duplicates=markets.length-unique.size;
       const invalid=markets.filter(x=>!x.symbol||!x.baseAsset||x.quote!=="USDT"||x.settle!=="USDT"||!x.active);
       const missingPrices=markets.filter(x=>!Number.isFinite(x.price)||x.price<=0);
-      const eligible=markets.filter(x=>evaluateEntryEligibility({baseAsset:x.baseAsset,lastPrice:x.price}).eligible);
+      const eligible=markets.filter(x=>evaluateEntryEligibility({baseAsset:x.baseAsset,lastPrice:x.price,marketInfo:x.marketInfo}).eligible);
       const rejected=markets.length-eligible.length;
-      const nonCrypto=markets.filter(x=>isNonCryptoBase(x.baseAsset));
+      const nonCrypto=markets.filter(x=>isNonCryptoMarket({baseAsset:x.baseAsset,marketInfo:x.marketInfo}));
       const ambiguousGas=markets.filter(x=>x.baseAsset==="GAS").map(x=>({symbol:x.symbol,marketType:x.marketType,marketSubtype:x.marketSubtype,contract:x.contract,swap:x.swap,linear:x.linear,marketInfo:x.marketInfo}));
       const pass=markets.length>0&&duplicates===0&&invalid.length===0;
       const row={exchange:name,status:pass?(missingPrices.length?"PASS_WITH_MISSING_TICKERS_EXCLUDED":"PASS"):"FAIL",activeUsdtPerpetuals:markets.length,uniqueSymbols:unique.size,
