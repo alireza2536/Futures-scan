@@ -9,7 +9,7 @@ import { createCcxtAdapter, fetchCcxtHistory, supportedCcxtExchanges } from "./c
 
 const CANDLE_COUNT = 1201;
 const EMA_LENGTH = 500;
-const CCI_LENGTH = 1200;
+const CCI_LENGTH = 1000;
 const SELECTED_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h", "1d"];
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC,BINGX,WEEX,KUCOIN,XT").split(",").map(v=>v.trim().toUpperCase()).filter(Boolean);
@@ -82,7 +82,7 @@ async function scanSymbolTimeframe(item,timeframe) {
     const bars=keepClosedCandles(raw,timeframe).slice(-CANDLE_COUNT);
     if(bars.length<CANDLE_COUNT) throw new Error(`insufficient closed candles ${bars.length}/${CANDLE_COUNT}`);
     assertCandleCoverage(bars,timeframe,CANDLE_COUNT);
-    const v=calculateLatestIndicators(bars,{emaLength:EMA_LENGTH,cciLength:timeframe==="1d"?1000:CCI_LENGTH});
+    const v=calculateLatestIndicators(bars,{emaLength:EMA_LENGTH,cciLength:CCI_LENGTH});
     let dailyCciState=null;
     if(timeframe==="1d") {
       const previous=await loadDailyCCIState(item.exchange,item.symbol);
@@ -93,7 +93,7 @@ async function scanSymbolTimeframe(item,timeframe) {
     if(![v.close,v.ema9,v.ema21,v.ema,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
     const ageMs=Date.now()-v.timestamp;
     if(ageMs<0||ageMs>TIMEFRAMES[timeframe].seconds*2000) throw new Error(`stale candle data: ageMs=${ageMs}`);
-    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema21:v.ema21,ema500:v.ema,cci:(timeframe==="1d"?dailyCciState.cci:v.cci),...(timeframe==="1d"?{cci1000:dailyCciState.cci}:{cci1200:v.cci}),cciLength:(timeframe==="1d"?1000:CCI_LENGTH),vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs};
+    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema21:v.ema21,ema500:v.ema,cci:(timeframe==="1d"?dailyCciState.cci:v.cci),cci1000:v.cci,cciLength:CCI_LENGTH,vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs};
   } catch(error) { return {timeframe,status:"DATA_ERROR",error:error.message}; }
 }
 async function scanSymbol(item) {
