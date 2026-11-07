@@ -8,7 +8,12 @@ import { createCcxtAdapter, fetchCcxtHistory, supportedCcxtExchanges } from "./c
 const CANDLE_COUNT = 1201;
 const EMA_LENGTH = 500;
 const CCI_LENGTH = 1200;
-const SELECTED_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h", "1d"];
+const ALL_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h", "1d"];
+const requestedTimeframe = (process.env.TIMEFRAME ?? "").trim();
+if (requestedTimeframe && !ALL_TIMEFRAMES.includes(requestedTimeframe)) {
+  throw new Error("TIMEFRAME must be one of: " + ALL_TIMEFRAMES.join(", "));
+}
+const SELECTED_TIMEFRAMES = requestedTimeframe ? [requestedTimeframe] : ALL_TIMEFRAMES;
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC,BINGX,WEEX,KUCOIN,XT").split(",").map(v=>v.trim().toUpperCase()).filter(Boolean);
 const MAX_SYMBOLS = Number(process.env.MAX_SYMBOLS ?? 0);
@@ -147,5 +152,5 @@ await writeFile("scan-results.json",JSON.stringify(summary,null,2));
 const persistence=await persistScanResults(summary);
 await Promise.all([...liveAdapters.values()].map(client=>client.close?.()));
 console.log(`PERSISTENCE | ${persistence.status}`);
-console.log(`SUMMARY | scanned=${results.length} | full=${summary.dataReady} | partial=${summary.partialData} | failed=${summary.dataErrors}`);
+console.log(`SUMMARY | timeframe=${SELECTED_TIMEFRAMES.join(",")} | scanned=${results.length} | full=${summary.dataReady} | partial=${summary.partialData} | failed=${summary.dataErrors}`);
 if(REQUIRE_DATA&&summary.dataErrors+summary.partialData>0) process.exitCode=1;
