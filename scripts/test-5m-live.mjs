@@ -1,7 +1,7 @@
 import { fetchOkxHistory, fetchMexcHistory, assertCandleCoverage } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 
-const REQUIRED_CLOSED_CANDLES=1201;
+const REQUIRED_CLOSED_CANDLES=1001;
 const TIMEFRAME="5m";
 const INTERVAL_MS=300000;
 
