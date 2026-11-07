@@ -22,7 +22,7 @@
 
 ## تایم‌فریم‌ها و اندیکاتورها
 
-تایم‌فریم‌ها: 5m، 15m، 1h، 2h، 4h و 1d.
+تایم‌فریم‌ها: 5m، 15m، 1h، 2h و 4h.
 
 برای هر تایم‌فریم، اسکنر ۱۲۰۱ کندل بسته را اعتبارسنجی می‌کند و این مقادیر را گزارش می‌دهد:
 
@@ -39,7 +39,6 @@ EMA500 و EMA2000 از محاسبات، state و خروجی اسکنر حذف ش
 
 - اعتبارسنجی OHLCV، ترتیب زمانی، یکتایی timestamp، پیوستگی کندل‌ها و تازگی آخرین کندل
 - گزارش خطا به‌ازای هر نماد و تایم‌فریم
-- نگهداری state فشردهٔ CCI روزانه با ۱۰۰۰ Typical Price و حداکثر ۹۰ کندل خام روزانه
 - ذخیرهٔ snapshot در Neon فقط در صورت تنظیم DATABASE_URL
 - این کد به‌صورت خودکار ستون‌های قدیمی EMA را از پایگاه داده حذف نمی‌کند.
 
@@ -70,8 +69,7 @@ npm run scan
 - `scripts/market-data.mjs`: دریافت و نرمال‌سازی کندل‌های OKX و MEXC
 - `scripts/ccxt-adapters.mjs`: آداپترهای BingX، WEEX، KuCoin Futures و XT
 - `scripts/indicators.mjs`: EMAهای باقیمانده، CCI1000 و VWAP
-- `scripts/daily-cci-state.mjs`: محاسبه و نگهداری state روزانهٔ CCI1000
 - `scripts/entry-filters.mjs`: فیلترهای قطعی ورود نماد
 - `scripts/scan-long.mjs`: دریافت داده و محاسبه اندیکاتورها؛ نام فایل برای سازگاری workflow حفظ شده است
 - `scripts/persist-neon.mjs`: ذخیره snapshot و state روزانه در Neon
-- `scripts/check-final-seven-exchanges.mjs`: اعتبارسنجی داده و اندیکاتورها برای شش صرافی و شش تایم‌فریم
+- `scripts/check-final-seven-exchanges.mjs`: اعتبارسنجی داده و اندیکاتورها برای شش صرافی و پنج تایم‌فریم
