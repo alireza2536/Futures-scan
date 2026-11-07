@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { TIMEFRAMES, assertCandleCoverage } from "./market-data.mjs";
 
-test("all six requested timeframes are defined for both active adapters",()=>{
-  assert.deepEqual(Object.keys(TIMEFRAMES),["5m","15m","1h","2h","4h","1d"]);
+test("the five supported intraday timeframes are defined for both active adapters",()=>{
+  assert.deepEqual(Object.keys(TIMEFRAMES),["5m","15m","1h","2h","4h"]);
   for(const tf of Object.values(TIMEFRAMES)) {
     assert.ok(tf.okx);
     assert.ok(tf.mexc);
@@ -16,7 +16,7 @@ test("timeframe durations and the exact 5m exchange mappings are correct",()=>{
   assert.equal(TIMEFRAMES["1h"].seconds,3600);
   assert.equal(TIMEFRAMES["2h"].seconds,7200);
   assert.equal(TIMEFRAMES["4h"].seconds,14400);
-  assert.equal(TIMEFRAMES["1d"].seconds,86400);
+  assert.equal(TIMEFRAMES["1d"],undefined);
 });
 const makeFiveMinuteBars=(count=1201)=>Array.from({length:count},(_,i)=>({
   timestamp:Date.UTC(2026,0,1)+i*300000,
