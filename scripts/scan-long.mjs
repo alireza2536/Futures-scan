@@ -93,7 +93,7 @@ async function scanSymbolTimeframe(item,timeframe) {
     if(![v.close,v.ema9,v.ema21,v.ema,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
     const ageMs=Date.now()-v.timestamp;
     if(ageMs<0||ageMs>TIMEFRAMES[timeframe].seconds*2000) throw new Error(`stale candle data: ageMs=${ageMs}`);
-    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema21:v.ema21,ema500:v.ema,cci:(timeframe==="1d"?dailyCciState.cci:v.cci),cciLength:(timeframe==="1d"?1000:CCI_LENGTH),vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs};
+    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema21:v.ema21,ema500:v.ema,cci:(timeframe==="1d"?dailyCciState.cci:v.cci),...(timeframe==="1d"?{cci1000:dailyCciState.cci}:{cci1200:v.cci}),cciLength:(timeframe==="1d"?1000:CCI_LENGTH),vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs};
   } catch(error) { return {timeframe,status:"DATA_ERROR",error:error.message}; }
 }
 async function scanSymbol(item) {
