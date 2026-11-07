@@ -56,8 +56,8 @@ export function advanceDailyCCIState(previous,bars) {
   const newBars=ema500Timestamp===null?orderedBars:orderedBars.filter(bar=>bar.timestamp>ema500Timestamp);
   const internalGap=newBars.some((bar,index)=>index>0&&bar.timestamp-newBars[index-1].timestamp!==DAY_MS);
   const leadingGap=ema500Timestamp!==null&&newBars.length>0&&newBars[0].timestamp-ema500Timestamp!==DAY_MS;
-  const needsSeed=ema500===null||internalGap||leadingGap||
-    (ema500Timestamp!==null&&orderedBars.at(-1).timestamp<ema500Timestamp);
+  if(ema500Timestamp!==null&&orderedBars.at(-1).timestamp<ema500Timestamp) throw new Error("Daily EMA500 input is older than stored state");
+  const needsSeed=ema500===null||internalGap||leadingGap;
   if(needsSeed) {
     const seedBars=assertContiguousDaily(orderedBars,"Daily EMA500",DAILY_EMA_LENGTH);
     const alpha=2/(DAILY_EMA_LENGTH+1);
