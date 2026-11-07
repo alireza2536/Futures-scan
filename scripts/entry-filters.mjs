@@ -5,7 +5,7 @@ export const MAX_ENTRY_PRICE_USD = 30;
 export const STABLECOIN_BASES = new Set([
   "USDT", "USDC", "USDE", "USDS", "DAI", "FDUSD", "TUSD", "BUSD",
   "USDP", "PYUSD", "GUSD", "USD1", "FRAX", "USDD", "UST", "USTC",
-  "EURC", "EURS", "EURA", "EURI", "USDX"
+  "EURC", "EURS", "EURA", "EURI", "USDX", "USDK", "USDB", "USDA", "USDJ", "USDH", "USN", "USX", "USDM", "USDL", "USDY", "USDR", "USDT0", "USDC.E", "USDCN", "BITO"
 ]);
 
 // Known non-cryptocurrency underlyings seen in exchange perpetual catalogs.
