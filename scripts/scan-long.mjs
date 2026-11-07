@@ -3,7 +3,7 @@ import { fetchOkxHistory, fetchMexcHistory, TIMEFRAMES, assertCandleCoverage } f
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { evaluateEntryEligibility, MAX_ENTRY_PRICE_USD } from "./entry-filters.mjs";
 import { persistScanResults, loadDailyCCIState, saveDailyCCIState } from "./persist-neon.mjs";
-import { advanceDailyCCIState } from "./daily-cci-state.mjs";
+import { advanceDailyCCIState, DAILY_CCI_FETCH_COUNT } from "./daily-cci-state.mjs";
 import { createCcxtAdapter, fetchCcxtHistory, supportedCcxtExchanges } from "./ccxt-adapters.mjs";
 
 const CANDLE_COUNT = 1201;
@@ -85,7 +85,7 @@ async function scanSymbolTimeframe(item,timeframe,{dailyEma500=null}={}) {
     let dailyCciState=null;
     if(timeframe==="1d") {
       const previous=await loadDailyCCIState(item.exchange,item.symbol);
-      dailyCciState=advanceDailyCCIState(previous,bars);
+      dailyCciState=advanceDailyCCIState(previous,bars.slice(-DAILY_CCI_FETCH_COUNT));
       await saveDailyCCIState(item.exchange,item.symbol,dailyCciState);
       v.cci=dailyCciState.cci;
       v.ema=dailyCciState.ema500;
