@@ -68,7 +68,7 @@ export function calculateVWAP(bars) {
   return output;
 }
 
-export function calculateLatestIndicators(bars, { emaLength = 500, cciLength = 1200 } = {}) {
+export function calculateLatestIndicators(bars, { emaLength = 500, cciLength = 1000 } = {}) {
   assertBars(bars, Math.max(emaLength, 21, cciLength));
   const closes = bars.map(bar => bar.close);
   const ema9 = calculateEMA(closes, 9);
