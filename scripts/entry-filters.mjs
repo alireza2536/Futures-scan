@@ -5,7 +5,7 @@ export const MAX_ENTRY_PRICE_USD = 30;
 export const STABLECOIN_BASES = new Set([
   "USDT", "USDC", "USDE", "USDS", "DAI", "FDUSD", "TUSD", "BUSD",
   "USDP", "PYUSD", "GUSD", "USD1", "FRAX", "USDD", "UST", "USTC",
-  "EURC", "EURS", "EURA", "EURI", "USDX", "USDK", "USDB", "USDA", "USDJ", "USDH", "USN", "USX", "USDM", "USDL", "USDY", "USDR", "USDT0", "USDC.E", "USDCN", "BITO"
+  "EURC", "EURS", "EURA", "EURI", "USDX", "USDK", "USDB", "USDA", "USDJ", "USDH", "USN", "USX", "USDM", "USDL", "USDY", "USDR", "USDT0" , "USDC.E", "USDCN"
 ]);
 
 // Known non-cryptocurrency underlyings seen in exchange perpetual catalogs.
@@ -15,7 +15,7 @@ export const NON_CRYPTO_BASES = new Set([
   "XAU", "XAG", "XPT", "XPD", "USOIL", "UKOIL", "WTI", "BRENT",
   "NATGAS", "COPPER", "WHEAT", "CORN", "SOYBEAN", "TUNGSTEN",
   // Equity / tokenized-stock underlyings observed in the exchange catalogs
-  "ANTHROPIC", "APPSTOCK", "NIO", "LUXSHARE", "SINOCERA", "CCTC",
+  "ANTHROPIC", "APPSTOCK", "NIO", "LUXSHARE", "SINOCERA", "CCTC", "BITO",
   // Major equity-index contracts
   "JP225", "US30", "US500", "SPX", "NAS100", "US100", "GER40",
   "DE40", "UK100", "FRA40", "HK50", "AUS200"
