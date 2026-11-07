@@ -44,7 +44,7 @@ test("daily EMA500 advances incrementally without reseeding",()=>{
 });
 test("daily EMA500 reseeds after a missing daily candle",()=>{
   const initial=advanceDailyCCIState(null,bars(1200));
-  const gapBars=bars(1201).filter(x=>x.timestamp>initial.lastTimestamp+86400000);
+  const gapBars=bars(1201,initial.lastTimestamp+2*86400000);
   const updated=advanceDailyCCIState(initial,gapBars);
   assert.ok(Number.isFinite(updated.ema500));
 });
