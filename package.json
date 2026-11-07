@@ -6,7 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --check scripts/scan-long.mjs && node --check scripts/check-final-seven-exchanges.mjs && node --test scripts/test-entry-filters.mjs scripts/test-indicators.mjs scripts/test-market-data.mjs scripts/test-persist-neon.mjs scripts/test-strategy.mjs scripts/test-rolling-indicator-state.mjs",
+    "test": "node --check scripts/scan-long.mjs && node --check scripts/check-final-seven-exchanges.mjs && node --test scripts/test-entry-filters.mjs scripts/test-indicators.mjs scripts/test-market-data.mjs scripts/test-persist-neon.mjs scripts/test-strategy.mjs scripts/test-rolling-indicator-state.mjs scripts/test-ema-state.mjs",
     "scan": "node scripts/scan-long.mjs",
     "test:5m:live": "node scripts/test-5m-live.mjs",
     "test:exchanges:live": "node scripts/test-seven-exchanges-live.mjs",
