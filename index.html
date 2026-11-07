@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101827">
+  <title>اسکن هوشمند ارزها در فیوچرز</title>
+  <style>
+    :root { color-scheme: dark; font-family: Tahoma, Arial, sans-serif; background:#0b1220; color:#e8eef8; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px; }
+    main { width:min(100%,720px); padding:clamp(22px,5vw,38px); border:1px solid #27364d; border-radius:22px; background:#111c2e; box-shadow:0 18px 60px #0005; }
+    h1 { margin:0 0 10px; font-size:clamp(22px,4vw,30px); }
+    p { color:#aebbd0; line-height:1.9; margin:0 0 26px; }
+    h2 { font-size:17px; margin:0 0 14px; }
+    .timeframes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+    button { font:inherit; cursor:pointer; }
+    .tf { min-height:54px; border:1px solid #344761; border-radius:13px; color:#dbe6f5; background:#17253a; font-size:16px; transition:.15s ease; }
+    .tf:hover { border-color:#7796c2; background:#20334e; }
+    .tf[aria-pressed="true"] { color:#fff; border-color:#5ca4ff; background:#174477; box-shadow:inset 0 0 0 1px #5ca4ff; }
+    .selected { margin-top:22px; padding:15px 17px; border-radius:13px; background:#0c1626; border:1px solid #27364d; }
+    .selected strong { color:#8fc3ff; }
+    .note { margin-top:16px; font-size:13px; color:#91a2ba; }
+    @media (max-width:460px) { body{padding:12px} main{padding:20px} .timeframes{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>اسکن هوشمند ارزها در فیوچرز</h1>
+    <p>تایم‌فریم موردنظر را انتخاب کن. هر تایم‌فریم مستقل است و انتخاب ۵ دقیقه‌ای هیچ شرط لانگ یا شورت جدیدی اضافه نمی‌کند.</p>
+    <section aria-labelledby="timeframe-title">
+      <h2 id="timeframe-title">انتخاب تایم‌فریم</h2>
+      <div class="timeframes" role="group" aria-label="تایم‌فریم اسکن">
+        <button class="tf" type="button" data-timeframe="5m" aria-pressed="true">۵ دقیقه (5m)</button>
+        <button class="tf" type="button" data-timeframe="15m" aria-pressed="false">۱۵ دقیقه (15m)</button>
+        <button class="tf" type="button" data-timeframe="1h" aria-pressed="false">۱ ساعت (1h)</button>
+        <button class="tf" type="button" data-timeframe="2h" aria-pressed="false">۲ ساعت (2h)</button>
+        <button class="tf" type="button" data-timeframe="4h" aria-pressed="false">۴ ساعت (4h)</button>
+        <button class="tf" type="button" data-timeframe="1d" aria-pressed="false">روزانه (1d)</button>
+      </div>
+    </section>
+    <div class="selected" aria-live="polite">تایم‌فریم انتخاب‌شده: <strong id="selected-timeframe">۵ دقیقه (5m)</strong></div>
+    <div class="note">این صفحه فعلاً رابط انتخاب تایم‌فریم است؛ اجرای اسکن از طریق رابط هنوز به سرویس اجرایی متصل نشده است.</div>
+  </main>
+  <script>
+    const labels = {
+      "5m": "۵ دقیقه (5m)", "15m": "۱۵ دقیقه (15m)",
+      "1h": "۱ ساعت (1h)", "2h": "۲ ساعت (2h)",
+      "4h": "۴ ساعت (4h)", "1d": "روزانه (1d)"
+    };
+    const buttons = [...document.querySelectorAll("[data-timeframe]")];
+    const output = document.getElementById("selected-timeframe");
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        for (const item of buttons) item.setAttribute("aria-pressed", String(item === button));
+        output.textContent = labels[button.dataset.timeframe];
+      });
+    }
+  </script>
+</body>
+</html>
