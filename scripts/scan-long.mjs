@@ -45,7 +45,7 @@ async function getMexcSymbols() {
   const p=await getJson("https://api.mexc.com/api/v1/contract/detail");
   if(p.success!==true||!Array.isArray(p.data)) throw new Error(`MEXC contracts rejected: ${p.message??p.code}`);
   return p.data.filter(x=>x.quoteCoin==="USDT"&&x.settleCoin==="USDT"&&x.state===0&&x.symbol?.endsWith("_USDT"))
-    .map(x=>({exchange:"MEXC",symbol:x.symbol,baseAsset:x.baseCoin,display:x.symbol}));
+    .map(x=>({exchange:"MEXC",symbol:x.symbol,baseAsset:x.baseCoin,display:x.symbol,marketInfo:x}));
 }
 async function getOkxPrices(base) {
   const p=await getJson(`${base}/api/v5/market/tickers?instType=SWAP`);
@@ -121,7 +121,7 @@ const candidates=exchangeInputs.flatMap(({symbols})=>symbols);
 const selected=SYMBOL_FILTER.length?candidates.filter(x=>SYMBOL_FILTER.includes(x.symbol)):candidates;
 const rejected=[],eligible=[];
 for(const item of selected) {
-  const d=evaluateEntryEligibility({baseAsset:item.baseAsset,lastPrice:item.lastPriceUsd});
+  const d=evaluateEntryEligibility({baseAsset:item.baseAsset,lastPrice:item.lastPriceUsd,marketInfo:item.marketInfo});
   if(d.eligible) eligible.push(item);
   else rejected.push({exchange:item.exchange,symbol:item.display,baseAsset:item.baseAsset,
     lastPriceUsd:Number.isFinite(item.lastPriceUsd)?item.lastPriceUsd:null,reason:d.reason});
