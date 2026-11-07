@@ -1,6 +1,8 @@
 export const DAILY_CCI_LENGTH = 1000;
+export const DAILY_CCI_FETCH_COUNT = 1001;
 export const DAILY_RAW_RETENTION = 90;
 export const DAILY_EMA_LENGTH = 500;
+const DAY_MS = 86400000;
 
 export function typicalPrice(bar) {
   const values=[bar?.timestamp,bar?.high,bar?.low,bar?.close];
@@ -17,7 +19,18 @@ export function calculateCCIFromTypicalPrices(values,length=DAILY_CCI_LENGTH) {
   return meanDeviation===0?0:(window[length-1]-mean)/(0.015*meanDeviation);
 }
 
-// Keep a rolling 1000-point CCI input window, EMA500 state, and only 90 raw OHLCV candles.
+function assertContiguousDaily(points,label,required=points.length) {
+  if(points.length<required) throw new Error(`${label} history incomplete: ${points.length}/${required}`);
+  const tail=points.slice(-required);
+  for(let i=1;i<tail.length;i+=1) {
+    if(tail[i].timestamp-tail[i-1].timestamp!==DAY_MS) throw new Error(`${label} history has a missing daily candle`);
+  }
+  return tail;
+}
+
+// 1001 fetched daily candles provide one extra closed candle for edge validation.
+// Keep the exact 1000-point CCI input window, EMA500 plus its own timestamp,
+// and no more than 90 raw OHLCV candles.
 export function advanceDailyCCIState(previous,bars) {
   if(!Array.isArray(bars)||!bars.length) throw new Error("Daily candles are required");
   const points=new Map();
@@ -31,28 +44,32 @@ export function advanceDailyCCIState(previous,bars) {
     points.set(candle.timestamp,typicalPrice(candle));
     raw.set(candle.timestamp,candle);
   }
-  const typicalPrices=[...points.entries()].sort((a,b)=>a[0]-b[0]).slice(-DAILY_CCI_LENGTH)
-    .map(([timestamp,value])=>({timestamp,value}));
+  const orderedPoints=[...points.entries()].sort((a,b)=>a[0]-b[0]).map(([timestamp,value])=>({timestamp,value}));
+  const typicalPrices=assertContiguousDaily(orderedPoints,"Daily CCI",DAILY_CCI_LENGTH).slice(-DAILY_CCI_LENGTH);
   const recentCandles=[...raw.values()].sort((a,b)=>a.timestamp-b.timestamp).slice(-DAILY_RAW_RETENTION);
-  if(typicalPrices.length<DAILY_CCI_LENGTH) throw new Error(`Daily CCI history incomplete: ${typicalPrices.length}/${DAILY_CCI_LENGTH}`);
   const cci=calculateCCIFromTypicalPrices(typicalPrices.map(x=>x.value));
 
-  // Seed EMA500 from the first available 500 closed daily candles, then
-  // advance only with newer daily closes. Persisting this value avoids
-  // needing to retain/re-download the full EMA history on every scan.
   let ema500=Number.isFinite(previous?.ema500)?previous.ema500:null;
-  const orderedBars=[...bars].sort((a,b)=>a.timestamp-b.timestamp);
-  const lastTimestamp=Number.isFinite(previous?.lastTimestamp)?previous.lastTimestamp:null;
-  const newBars=lastTimestamp===null?orderedBars:orderedBars.filter(bar=>bar.timestamp>lastTimestamp);
-  const hasGap=lastTimestamp!==null&&newBars.length>0&&newBars[0].timestamp!==lastTimestamp+86400000;
-  if(ema500===null||hasGap||(lastTimestamp!==null&&lastTimestamp>orderedBars.at(-1).timestamp)){
-    if(orderedBars.length<DAILY_EMA_LENGTH) throw new Error(`Daily EMA(${DAILY_EMA_LENGTH}) history incomplete: ${orderedBars.length}/${DAILY_EMA_LENGTH}`);
+  let ema500Timestamp=Number.isFinite(previous?.ema500Timestamp)?previous.ema500Timestamp:
+    Number.isFinite(previous?.lastTimestamp)?previous.lastTimestamp:null;
+  const orderedBars=[...new Map(bars.map(bar=>[bar.timestamp,bar])).values()].sort((a,b)=>a.timestamp-b.timestamp);
+  const newBars=ema500Timestamp===null?orderedBars:orderedBars.filter(bar=>bar.timestamp>ema500Timestamp);
+  const internalGap=newBars.some((bar,index)=>index>0&&bar.timestamp-newBars[index-1].timestamp!==DAY_MS);
+  const leadingGap=ema500Timestamp!==null&&newBars.length>0&&newBars[0].timestamp-ema500Timestamp!==DAY_MS;
+  const needsSeed=ema500===null||internalGap||leadingGap||
+    (ema500Timestamp!==null&&orderedBars.at(-1).timestamp<ema500Timestamp);
+  if(needsSeed) {
+    const seedBars=assertContiguousDaily(orderedBars,"Daily EMA500",DAILY_EMA_LENGTH);
     const alpha=2/(DAILY_EMA_LENGTH+1);
-    ema500=orderedBars[0].close;
-    for(let i=1;i<orderedBars.length;i+=1) ema500=alpha*orderedBars[i].close+(1-alpha)*ema500;
+    ema500=seedBars[0].close;
+    for(let i=1;i<seedBars.length;i+=1) ema500=alpha*seedBars[i].close+(1-alpha)*ema500;
+    ema500Timestamp=seedBars.at(-1).timestamp;
   } else {
     const alpha=2/(DAILY_EMA_LENGTH+1);
-    for(const bar of newBars) ema500=alpha*bar.close+(1-alpha)*ema500;
+    for(const bar of newBars) {
+      ema500=alpha*bar.close+(1-alpha)*ema500;
+      ema500Timestamp=bar.timestamp;
+    }
   }
-  return {lastTimestamp:typicalPrices.at(-1).timestamp,typicalPrices,recentCandles,cci,ema500};
+  return {lastTimestamp:typicalPrices.at(-1).timestamp,typicalPrices,recentCandles,cci,ema500,ema500Timestamp};
 }
