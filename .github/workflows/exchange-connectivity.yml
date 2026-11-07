@@ -19,7 +19,7 @@ jobs:
         run: node --test scripts/test-strategy.mjs
       - name: Install CCXT adapters for final six exchanges
         run: npm install --no-save --no-package-lock ccxt
-      - name: Test final six exchanges across all six timeframes, including 5m
+      - name: Test final six exchanges across all five intraday timeframes, including 5m
         run: node scripts/check-final-seven-exchanges.mjs
       - name: Upload final six-exchange API report
         if: always() && hashFiles('final-six-exchange-api-report.json') != ''
