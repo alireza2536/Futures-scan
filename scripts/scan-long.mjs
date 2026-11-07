@@ -5,7 +5,7 @@ import { evaluateEntryEligibility, MAX_ENTRY_PRICE_USD } from "./entry-filters.m
 import { persistScanResults } from "./persist-neon.mjs";
 import { createCcxtAdapter, fetchCcxtHistory, supportedCcxtExchanges } from "./ccxt-adapters.mjs";
 
-const CANDLE_COUNT = 1201;
+const CANDLE_COUNT = 1001;
 const CCI_LENGTH = 1000;
 const SELECTED_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h"];
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
