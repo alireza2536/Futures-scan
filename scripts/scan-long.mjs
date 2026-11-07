@@ -2,13 +2,12 @@ import { writeFile } from "node:fs/promises";
 import { fetchOkxHistory, fetchMexcHistory, TIMEFRAMES, assertCandleCoverage } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { evaluateEntryEligibility, MAX_ENTRY_PRICE_USD } from "./entry-filters.mjs";
-import { persistScanResults, loadDailyCCIState, saveDailyCCIState } from "./persist-neon.mjs";
-import { advanceDailyCCIState, DAILY_CCI_FETCH_COUNT } from "./daily-cci-state.mjs";
+import { persistScanResults } from "./persist-neon.mjs";
 import { createCcxtAdapter, fetchCcxtHistory, supportedCcxtExchanges } from "./ccxt-adapters.mjs";
 
 const CANDLE_COUNT = 1201;
 const CCI_LENGTH = 1000;
-const SELECTED_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h", "1d"];
+const SELECTED_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h"];
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const APPROVED_EXCHANGES = ["OKX","MEXC","BINGX","WEEX","KUCOIN","XT"];
 const EXCHANGES = (process.env.EXCHANGES ?? APPROVED_EXCHANGES.join(",")).split(",").map(v=>v.trim().toUpperCase()).filter(Boolean);
@@ -82,13 +81,6 @@ async function scanSymbolTimeframe(item,timeframe) {
     if(bars.length<CANDLE_COUNT) throw new Error(`insufficient closed candles ${bars.length}/${CANDLE_COUNT}`);
     assertCandleCoverage(bars,timeframe,CANDLE_COUNT);
     const v=calculateLatestIndicators(bars,{cciLength:CCI_LENGTH});
-    let dailyCciState=null;
-    if(timeframe==="1d") {
-      const previous=await loadDailyCCIState(item.exchange,item.symbol);
-      dailyCciState=advanceDailyCCIState(previous,bars.slice(-DAILY_CCI_FETCH_COUNT));
-      await saveDailyCCIState(item.exchange,item.symbol,dailyCciState);
-      v.cci=dailyCciState.cci;
-    }
     if(![v.close,v.ema9,v.ema20,v.ema21,v.ema50,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
     const ageMs=Date.now()-v.timestamp;
     if(ageMs<0||ageMs>TIMEFRAMES[timeframe].seconds*2000) throw new Error(`stale candle data: ageMs=${ageMs}`);
@@ -97,10 +89,7 @@ async function scanSymbolTimeframe(item,timeframe) {
 }
 async function scanSymbol(item) {
   const timeframes={};
-  // Update the daily rolling CCI1000 state before scanning the remaining timeframes.
-  const daily=await scanSymbolTimeframe(item,"1d");
-  timeframes["1d"]=daily;
-  for(const tf of SELECTED_TIMEFRAMES.filter(value=>value!=="1d")) {
+  for(const tf of SELECTED_TIMEFRAMES) {
     timeframes[tf]=await scanSymbolTimeframe(item,tf);
   }
   const ready=Object.values(timeframes).filter(x=>x.status==="DATA_READY").length;
