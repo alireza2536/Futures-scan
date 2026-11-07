@@ -116,11 +116,12 @@ async function checkExchange(config) {
         if (target.timeframe === "4h") {
           const closed = keepClosedFourHourCandles(bars);
           if (closed.length < 1201) throw new Error(`Only ${closed.length} closed 4h candles; need 1201`);
-          const values = calculateLatestIndicators(closed, { emaLength: 500, cciLength: 1200 });
-          const longRule = isLongSetup({ close: values.close, ema500: values.ema, cci1200: values.cci });
+          const values = calculateLatestIndicators(closed, { cciLength: 1000 });
+          const longRule = isLongSetup({ cci1000: values.cci });
           output.indicators = {
             candleTime: new Date(values.timestamp).toISOString(),
-            close: values.close, ema500: values.ema, cci1200: values.cci,
+            close: values.close, ema9: values.ema9, ema20: values.ema20,
+            ema21: values.ema21, ema50: values.ema50, cci1000: values.cci,
             longConditionMet: longRule
           };
         }
