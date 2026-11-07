@@ -2,7 +2,7 @@ import { fetchOkxHistory, fetchMexcHistory, TIMEFRAMES, assertCandleCoverage } f
 import { createCcxtAdapter, fetchCcxtHistory } from "./ccxt-adapters.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 
-const COUNT=1203, CCI_LENGTH=1000;
+const COUNT=1003, REQUIRED_CLOSED=1001, CCI_LENGTH=1000;
 const TIMEFRAME_NAMES=Object.keys(TIMEFRAMES);
 const results=[];
 async function verify(exchange,timeframe,fetcher){
@@ -10,8 +10,8 @@ async function verify(exchange,timeframe,fetcher){
     const raw=await fetcher();
     const intervalMs=TIMEFRAMES[timeframe].seconds*1000;
     const closed=raw.filter(bar=>bar.confirmed===false?false:
-      bar.confirmed===true?true:Number.isFinite(bar.timestamp)&&bar.timestamp+intervalMs<=Date.now()).slice(-1201);
-    const bars=assertCandleCoverage(closed,timeframe,1201);
+      bar.confirmed===true?true:Number.isFinite(bar.timestamp)&&bar.timestamp+intervalMs<=Date.now()).slice(-REQUIRED_CLOSED);
+    const bars=assertCandleCoverage(closed,timeframe,REQUIRED_CLOSED);
     const values=calculateLatestIndicators(bars,{cciLength:CCI_LENGTH});
     for(const key of ["close","ema9","ema20","ema21","ema50","cci","vwap"]){
       if(!Number.isFinite(values[key])) throw new Error("non-finite "+key);
