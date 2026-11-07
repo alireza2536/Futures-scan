@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Run deterministic indicator tests
         run: node --test scripts/test-indicators.mjs
-      - name: Run strict long-strategy tests
+      - name: Run CCI1000 strategy tests
         run: node --test scripts/test-strategy.mjs
       - name: Install CCXT adapters for final six exchanges
         run: npm install --no-save --no-package-lock ccxt
