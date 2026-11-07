@@ -8,7 +8,7 @@ import { evaluateEntryEligibility } from "./entry-filters.mjs";
 const EXCHANGES=["OKX","MEXC",...supportedCcxtExchanges()];
 const exchangeName=String(process.env.EXCHANGE??"").toUpperCase();
 if(!EXCHANGES.includes(exchangeName)) throw new Error("Set EXCHANGE to one of: "+EXCHANGES.join(", "));
-const COUNT=1203, REQUIRED_CLOSED=1201, TIMEFRAME_NAMES=Object.keys(TIMEFRAMES);
+const COUNT=1203, REQUIRED_CLOSED=1201, CCI_LENGTH=1000, TIMEFRAME_NAMES=Object.keys(TIMEFRAMES);
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const reportPath=`history-universe-${exchangeName}.jsonl`;
 fs.writeFileSync(reportPath,"");
@@ -52,14 +52,14 @@ try{
         const raw=await fetchHistory(client,market,timeframe);
         const closed=raw.filter(bar=>isClosed(bar,timeframe)).slice(-REQUIRED_CLOSED);
         const bars=assertCandleCoverage(closed,timeframe,REQUIRED_CLOSED);
-        const values=calculateLatestIndicators(bars,{emaLength:500,cciLength:1200});
+        const values=calculateLatestIndicators(bars,{emaLength:500,cciLength:CCI_LENGTH});
         for(const key of ["close","ema9","ema21","ema","cci","vwap"]){
           if(!Number.isFinite(values[key])) throw new Error("non-finite "+key);
         }
         const intervalMs=TIMEFRAMES[timeframe].seconds*1000;
         const age=Date.now()-(bars.at(-1).timestamp+intervalMs);
         if(age<0||age>intervalMs*2) throw new Error("stale last closed candle: "+age+"ms");
-        log({exchange:exchangeName,symbol:market.symbol,baseAsset:market.baseAsset,timeframe,status:"PASS",closedCandles:bars.length,lastClosedAt:new Date(bars.at(-1).timestamp).toISOString()});
+        log({exchange:exchangeName,symbol:market.symbol,baseAsset:market.baseAsset,timeframe,status:"PASS",closedCandles:bars.length,lastClosedAt:new Date(bars.at(-1).timestamp).toISOString(),cciLength:CCI_LENGTH});
       }catch(error){
         log({exchange:exchangeName,symbol:market.symbol,baseAsset:market.baseAsset,timeframe,status:"FAIL",error:error.message});
       }
