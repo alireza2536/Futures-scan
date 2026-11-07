@@ -32,21 +32,33 @@ export function isStablecoinBase(value) {
 export function isNonCryptoBase(value) {
   const base = normalizeBaseAsset(value);
   if (!base) return false;
-  if (NON_CRYPTO_BASES.has(base)) return true;
-  // Exchange-specific synthetic market identifiers for indices and FX.
+  if (NON_CRYPTO_BASES.has(base) || base.endsWith("STOCK")) return true;
   if (/^(?:NCS|NCFX|NCCO|NCCX)[A-Z0-9]+$/.test(base)) return true;
   const fiatCodes = new Set(["USD","EUR","JPY","GBP","CHF","AUD","CAD","CNY","INR","TWD","HKD","SGD","NZD","KRW","TRY","RUB","BRL","MXN","ZAR","SEK","NOK","DKK","PLN","CZK","HUF","ILS","AED","SAR","THB","IDR","MYR","PHP","VND","PKR","BDT","KWD","QAR","EGP","ARS","CLP","COP"]);
   if (/^[A-Z]{6}$/.test(base) && fiatCodes.has(base.slice(0,3)) && fiatCodes.has(base.slice(3,6))) return true;
   return false;
 }
 
-export function evaluateEntryEligibility({ baseAsset, lastPrice }) {
+export function isNonCryptoMarket({ baseAsset, marketInfo } = {}) {
+  if (isNonCryptoBase(baseAsset)) return true;
+  if (!marketInfo || typeof marketInfo !== "object") return false;
+  const keys = ["displayNameEn","displayName","enName","businessName","description","enDesc","enRemark","assetClass","marketType","underlyingType","underlyingSubType","productType","category","tags"];
+  const values = [];
+  for (const key of keys) {
+    const value = marketInfo[key];
+    if (Array.isArray(value)) values.push(...value.filter(v => typeof v === "string"));
+    else if (typeof value === "string") values.push(value);
+  }
+  return values.some(value => /\b(?:stock|equity|equities|etf|forex|foreign exchange|fx pair|index|indices|commodity|commodities|gold|silver|crude oil|natural gas)\b|股票|股指/i.test(value));
+}
+
+export function evaluateEntryEligibility({ baseAsset, lastPrice, marketInfo }) {
   const base = normalizeBaseAsset(baseAsset);
   const price = Number(lastPrice);
 
   if (!base) return { eligible: false, reason: "MISSING_BASE_ASSET" };
   if (isStablecoinBase(base)) return { eligible: false, reason: "STABLECOIN_BASE" };
-  if (isNonCryptoBase(base)) return { eligible: false, reason: "NON_CRYPTO_UNDERLYING" };
+  if (isNonCryptoMarket({ baseAsset: base, marketInfo })) return { eligible: false, reason: "NON_CRYPTO_UNDERLYING" };
   if (!Number.isFinite(price) || price <= 0) {
     return { eligible: false, reason: "INVALID_OR_MISSING_PRICE" };
   }
