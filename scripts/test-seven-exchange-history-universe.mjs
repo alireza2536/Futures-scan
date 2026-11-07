@@ -52,8 +52,8 @@ try{
         const raw=await fetchHistory(client,market,timeframe);
         const closed=raw.filter(bar=>isClosed(bar,timeframe)).slice(-REQUIRED_CLOSED);
         const bars=assertCandleCoverage(closed,timeframe,REQUIRED_CLOSED);
-        const values=calculateLatestIndicators(bars,{emaLength:500,cciLength:CCI_LENGTH});
-        for(const key of ["close","ema9","ema21","ema","cci","vwap"]){
+        const values=calculateLatestIndicators(bars,{cciLength:CCI_LENGTH});
+        for(const key of ["close","ema9","ema20","ema21","ema50","cci","vwap"]){
           if(!Number.isFinite(values[key])) throw new Error("non-finite "+key);
         }
         const intervalMs=TIMEFRAMES[timeframe].seconds*1000;

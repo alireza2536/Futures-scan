@@ -27,34 +27,6 @@ test("incremental update matches a fresh full-window CCI1000 calculation",()=>{
   assert.equal(updated.lastTimestamp,next.at(-1).timestamp);
   assert.equal(updated.typicalPrices.length,1000);
 });
-test("daily EMA500 initializes from closed daily candles and stores its own timestamp",()=>{
-  const input=bars(1200);
-  const state=advanceDailyCCIState(null,input);
-  assert.ok(Number.isFinite(state.ema500));
-  assert.equal(state.ema500Timestamp,input.at(-1).timestamp);
-  assert.equal(state.recentCandles.length,DAILY_RAW_RETENTION);
-  const alpha=2/501;
-  let expected=input[0].close;
-  for(const bar of input.slice(1)) expected=alpha*bar.close+(1-alpha)*expected;
-  assert.ok(Math.abs(state.ema500-expected)<1e-10);
-});
-test("daily EMA500 advances incrementally and advances its independent timestamp",()=>{
-  const first=bars(1200);
-  const initial=advanceDailyCCIState(null,first);
-  const extended=bars(1201);
-  const updated=advanceDailyCCIState(initial,extended.slice(-2));
-  const alpha=2/501;
-  const expected=alpha*extended.at(-1).close+(1-alpha)*initial.ema500;
-  assert.ok(Math.abs(updated.ema500-expected)<1e-10);
-  assert.equal(updated.ema500Timestamp,extended.at(-1).timestamp);
-});
-test("daily EMA500 reseeds after a missing daily candle",()=>{
-  const initial=advanceDailyCCIState(null,bars(1200));
-  const gapBars=bars(1201,initial.lastTimestamp+2*86400000);
-  const updated=advanceDailyCCIState(initial,gapBars);
-  assert.ok(Number.isFinite(updated.ema500));
-  assert.equal(updated.ema500Timestamp,gapBars.at(-1).timestamp);
-});
 test("rejects a missing candle inside the latest CCI1000 input window",()=>{
   const input=bars(1002);
   input[500].timestamp+=3600000;

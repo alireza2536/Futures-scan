@@ -27,10 +27,10 @@ test("zero-volume session produces null rather than NaN",()=>{
   const bars=mkBars(3).map(x=>({...x,volume:0}));
   assert.equal(calculateVWAP(bars).at(-1),null);
 });
-test("latest indicators expose EMA9, EMA21, EMA500, CCI1000 and VWAP",()=>{
+test("latest indicators expose EMA9, EMA20, EMA21, EMA50, CCI1000 and VWAP",()=>{
   const bars=mkBars(1201);
   const v=calculateLatestIndicators(bars);
-  for(const key of ["ema9","ema21","ema","cci","vwap"]) assert.ok(Number.isFinite(v[key]),key);
+  for(const key of ["ema9","ema20","ema21","ema50","cci","vwap"]) assert.ok(Number.isFinite(v[key]),key);
   assert.equal(v.candleCount,1201);
 });
 test("rejects duplicate timestamps and malformed OHLCV",()=>{
@@ -38,6 +38,6 @@ test("rejects duplicate timestamps and malformed OHLCV",()=>{
   assert.throws(()=>calculateVWAP([...bars,{...bars[3]}]),/chronological and unique/);
   assert.throws(()=>calculateVWAP([{...bars[0],volume:-1}]),/Invalid OHLCV/);
 });
-test("requires enough history for CCI1000 and EMA500",()=>{
+test("requires enough history for CCI1000 and retained EMA indicators",()=>{
   assert.throws(()=>calculateLatestIndicators(mkBars(999)),/At least 1000/);
 });

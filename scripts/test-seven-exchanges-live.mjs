@@ -12,8 +12,8 @@ async function verify(exchange,timeframe,fetcher){
     const closed=raw.filter(bar=>bar.confirmed===false?false:
       bar.confirmed===true?true:Number.isFinite(bar.timestamp)&&bar.timestamp+intervalMs<=Date.now()).slice(-1201);
     const bars=assertCandleCoverage(closed,timeframe,1201);
-    const values=calculateLatestIndicators(bars,{emaLength:500,cciLength:CCI_LENGTH});
-    for(const key of ["close","ema9","ema21","ema","cci","vwap"]){
+    const values=calculateLatestIndicators(bars,{cciLength:CCI_LENGTH});
+    for(const key of ["close","ema9","ema20","ema21","ema50","cci","vwap"]){
       if(!Number.isFinite(values[key])) throw new Error("non-finite "+key);
     }
     const age=Date.now()-(bars.at(-1).timestamp+intervalMs);
