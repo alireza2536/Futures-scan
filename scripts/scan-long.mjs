@@ -7,11 +7,11 @@ import { advanceDailyCCIState, DAILY_CCI_FETCH_COUNT } from "./daily-cci-state.m
 import { createCcxtAdapter, fetchCcxtHistory, supportedCcxtExchanges } from "./ccxt-adapters.mjs";
 
 const CANDLE_COUNT = 1201;
-const EMA_LENGTH = 500;
 const CCI_LENGTH = 1000;
 const SELECTED_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h", "1d"];
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
-const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC,BINGX,WEEX,KUCOIN,XT").split(",").map(v=>v.trim().toUpperCase()).filter(Boolean);
+const APPROVED_EXCHANGES = ["OKX","MEXC","BINGX","WEEX","KUCOIN","XT"];
+const EXCHANGES = (process.env.EXCHANGES ?? APPROVED_EXCHANGES.join(",")).split(",").map(v=>v.trim().toUpperCase()).filter(Boolean);
 const MAX_SYMBOLS = Number(process.env.MAX_SYMBOLS ?? 0);
 const SYMBOL_FILTER = (process.env.SYMBOLS ?? "").split(",").map(v=>v.trim()).filter(Boolean);
 const REQUIRE_DATA = process.env.REQUIRE_DATA === "true";
@@ -71,7 +71,7 @@ function keepClosedCandles(bars,timeframe,now=Date.now()) {
   return bars.filter(bar=>bar.confirmed===false?false:bar.confirmed===true?true:
     Number.isFinite(bar.timestamp)&&bar.timestamp+intervalMs<=now);
 }
-async function scanSymbolTimeframe(item,timeframe,{dailyEma500=null}={}) {
+async function scanSymbolTimeframe(item,timeframe) {
   try {
     const raw=["OKX","MEXC"].includes(item.exchange)
       ? item.exchange==="OKX"
@@ -81,31 +81,27 @@ async function scanSymbolTimeframe(item,timeframe,{dailyEma500=null}={}) {
     const bars=keepClosedCandles(raw,timeframe).slice(-CANDLE_COUNT);
     if(bars.length<CANDLE_COUNT) throw new Error(`insufficient closed candles ${bars.length}/${CANDLE_COUNT}`);
     assertCandleCoverage(bars,timeframe,CANDLE_COUNT);
-    const v=calculateLatestIndicators(bars,{emaLength:EMA_LENGTH,cciLength:CCI_LENGTH});
+    const v=calculateLatestIndicators(bars,{cciLength:CCI_LENGTH});
     let dailyCciState=null;
     if(timeframe==="1d") {
       const previous=await loadDailyCCIState(item.exchange,item.symbol);
       dailyCciState=advanceDailyCCIState(previous,bars.slice(-DAILY_CCI_FETCH_COUNT));
       await saveDailyCCIState(item.exchange,item.symbol,dailyCciState);
       v.cci=dailyCciState.cci;
-      v.ema=dailyCciState.ema500;
-    } else if(timeframe==="4h") {
-      if(!Number.isFinite(dailyEma500)) throw new Error("daily EMA500 state is unavailable");
-      v.ema=dailyEma500;
     }
-    if(![v.close,v.ema9,v.ema21,v.ema,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
+    if(![v.close,v.ema9,v.ema20,v.ema21,v.ema50,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
     const ageMs=Date.now()-v.timestamp;
     if(ageMs<0||ageMs>TIMEFRAMES[timeframe].seconds*2000) throw new Error(`stale candle data: ageMs=${ageMs}`);
-    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema21:v.ema21,ema500:v.ema,cci:(timeframe==="1d"?dailyCciState.cci:v.cci),cci1000:v.cci,cciLength:CCI_LENGTH,vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs,ema500Source:timeframe==="4h"||timeframe==="1d"?"1d":timeframe};
+    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema20:v.ema20,ema21:v.ema21,ema50:v.ema50,cci1000:v.cci,cciLength:CCI_LENGTH,vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs};
   } catch(error) { return {timeframe,status:"DATA_ERROR",error:error.message}; }
 }
 async function scanSymbol(item) {
   const timeframes={};
-  // Build/update daily rolling state first so the 4h comparison uses daily EMA500.
+  // Update the daily rolling CCI1000 state before scanning the remaining timeframes.
   const daily=await scanSymbolTimeframe(item,"1d");
   timeframes["1d"]=daily;
   for(const tf of SELECTED_TIMEFRAMES.filter(value=>value!=="1d")) {
-    timeframes[tf]=await scanSymbolTimeframe(item,tf,{dailyEma500:daily.ema500});
+    timeframes[tf]=await scanSymbolTimeframe(item,tf);
   }
   const ready=Object.values(timeframes).filter(x=>x.status==="DATA_READY").length;
   return {exchange:item.exchange,symbol:item.display,baseAsset:item.baseAsset,lastPriceUsd:item.lastPriceUsd,
@@ -113,7 +109,7 @@ async function scanSymbol(item) {
 }
 if(!Number.isInteger(CONCURRENCY)||CONCURRENCY<1||CONCURRENCY>10) throw new Error("CONCURRENCY must be an integer from 1 to 10");
 const supportedExchanges=["OKX","MEXC",...supportedCcxtExchanges()];
-if(EXCHANGES.some(x=>!supportedExchanges.includes(x))) throw new Error("Unsupported exchange. Supported: "+supportedExchanges.join(", "));
+if(EXCHANGES.some(x=>!APPROVED_EXCHANGES.includes(x)||!supportedExchanges.includes(x))) throw new Error("Only the six approved exchanges are allowed: "+APPROVED_EXCHANGES.join(", "));
 if(!Number.isInteger(MAX_SYMBOLS)||MAX_SYMBOLS<0) throw new Error("MAX_SYMBOLS must be 0 (unlimited) or a positive integer");
 
 const liveAdapters=new Map();
