@@ -39,7 +39,7 @@ async function getJson(url) {
 async function getOkxSymbols(base) {
   const p=await getJson(`${base}/api/v5/public/instruments?instType=SWAP`);
   if(p.code!=="0"||!Array.isArray(p.data)) throw new Error(`OKX instruments rejected: ${p.msg??p.code}`);
-  return p.data.filter(x=>x.state==="live"&&x.settleCcy==="USDT").map(x=>({exchange:"OKX",symbol:x.instId,baseAsset:x.baseCcy||x.instId.split("-")[0],base,display:x.instId}));
+  return p.data.filter(x=>x.state==="live"&&x.settleCcy==="USDT").map(x=>({exchange:"OKX",symbol:x.instId,baseAsset:x.baseCcy||x.instId.split("-")[0],base,display:x.instId,marketInfo:x}));
 }
 async function getMexcSymbols() {
   const p=await getJson("https://api.mexc.com/api/v1/contract/detail");
