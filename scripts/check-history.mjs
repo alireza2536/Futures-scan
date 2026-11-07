@@ -15,8 +15,8 @@ async function calculate(name, bars, mode) {
     const ema50 = calculateEMA(closes, 50).at(-1);
     console.log(`PASS | ${name} | candles=${bars.length} | close=${closes.at(-1)} | EMA20=${ema20} | EMA50=${ema50}`);
   } else {
-    const result = calculateLatestIndicators(bars, { emaLength: 500, cciLength: 1200 });
-    console.log(`PASS | ${name} | candles=${bars.length} | close=${result.close} | EMA500=${result.ema} | CCI1200=${result.cci}`);
+    const result = calculateLatestIndicators(bars, { cciLength: 1000 });
+    console.log(`PASS | ${name} | candles=${bars.length} | close=${result.close} | EMA9=${result.ema9} | EMA20=${result.ema20} | EMA21=${result.ema21} | EMA50=${result.ema50} | CCI1000=${result.cci}`);
   }
 }
 
