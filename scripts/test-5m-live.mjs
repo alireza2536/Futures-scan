@@ -17,7 +17,7 @@ async function verify(name,fetcher) {
     const raw=await fetcher(REQUIRED_CLOSED_CANDLES+2);
     const closed=onlyClosedFiveMinuteCandles(raw).slice(-REQUIRED_CLOSED_CANDLES);
     const bars=assertCandleCoverage(closed,TIMEFRAME,REQUIRED_CLOSED_CANDLES);
-    const indicators=calculateLatestIndicators(bars,{emaLength:500,cciLength:1200});
+    const indicators=calculateLatestIndicators(bars,{emaLength:500,cciLength:1000});
     for(const key of ["ema9","ema21","ema","cci","vwap"]) {
       if(!Number.isFinite(indicators[key])) throw new Error(`non-finite ${key} result`);
     }
@@ -28,7 +28,7 @@ async function verify(name,fetcher) {
       lastClosedCandleAt:new Date(bars.at(-1).timestamp).toISOString(),
       latestClose:indicators.close,
       ema9:indicators.ema9,ema21:indicators.ema21,ema500:indicators.ema,
-      cci1200:indicators.cci,vwap:indicators.vwap
+      cci1000:indicators.cci,vwap:indicators.vwap
     };
   } catch(error) {
     return {exchange:name,status:"FAIL",timeframe:TIMEFRAME,error:error.message};
