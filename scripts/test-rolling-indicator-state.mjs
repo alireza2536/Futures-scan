@@ -48,3 +48,13 @@ test("rolling state rejects gaps, duplicate candles, and unclosed candles", () =
 test("rolling state requires CCI length plus one closed candle for project coverage", () => {
   assert.throws(() => createRollingIndicatorState(barsFrom(5), { timeframeMs: INTERVAL, cciLength: 5 }), /At least 6 closed candles/);
 });
+
+test("full CCI1000 rolling window matches full-history calculation after one new candle", () => {
+  const history = barsFrom(1002);
+  let state = createRollingIndicatorState(history.slice(0, 1001), { timeframeMs: INTERVAL, cciLength: 1000 });
+  assert.equal(state.typicalPrices.length, 1000);
+  assert.ok(Math.abs(state.cci - calculateCCI(history.slice(0, 1001), 1000).at(-1)) < 1e-9);
+  state = advanceRollingIndicatorState(state, history[1001]);
+  assert.ok(Math.abs(state.cci - calculateCCI(history, 1000).at(-1)) < 1e-9);
+  assert.equal(state.typicalPrices.length, 1000);
+});
