@@ -35,8 +35,8 @@ async function runOne(exchange) {
       raw = await fetchCcxtHistory({client: adapter.client, symbol, timeframe: TF, count: REQUIRED + 3});
     }
     const bars = assertCandleCoverage(closedOnly(raw), TF, REQUIRED);
-    const values = calculateLatestIndicators(bars, {emaLength:500, cciLength:1200});
-    for (const key of ["close", "ema9", "ema21", "ema", "cci", "vwap"]) {
+    const values = calculateLatestIndicators(bars, {cciLength:1000});
+    for (const key of ["close", "ema9", "ema20", "ema21", "ema50", "cci", "vwap"]) {
       if (!Number.isFinite(values[key])) throw new Error("Invalid indicator result: " + key);
     }
     const age = Date.now() - values.timestamp;
@@ -44,8 +44,8 @@ async function runOne(exchange) {
     return {exchange, status:"PASS", symbol, timeframe:TF, closedCandles:bars.length,
       firstCandleAt:new Date(bars[0].timestamp).toISOString(),
       lastClosedCandleAt:new Date(values.timestamp).toISOString(), latestCandleAgeMs:age,
-      ema9:values.ema9, ema21:values.ema21, ema500:values.ema,
-      cci1200:values.cci, vwap:values.vwap};
+      ema9:values.ema9, ema20:values.ema20, ema21:values.ema21, ema50:values.ema50,
+      cci1000:values.cci, vwap:values.vwap};
   } catch (error) {
     return {exchange, status:"FAIL", timeframe:TF, error:error?.message ?? String(error)};
   } finally {
