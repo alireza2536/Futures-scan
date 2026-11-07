@@ -18,6 +18,8 @@ test("EMA500 initializes from closed contiguous history and matches reference ca
   const expected = calculateEMA(seed.map(bar => bar.close), 500).at(-1);
   assert.ok(Math.abs(state.value - expected) < 1e-10);
   assert.equal(state.lastTimestamp, seed.at(-1).timestamp);
+  assert.equal(state.history.length, seed.length);
+  assert.equal(state.history.at(-1).value, state.value);
 });
 
 test("EMA state advances one new candle without historical bars", () => {
@@ -28,6 +30,8 @@ test("EMA state advances one new candle without historical bars", () => {
   const expected = calculateEMA([...seed.map(bar => bar.close), next.close], 500).at(-1);
   assert.ok(Math.abs(advanced.value - expected) < 1e-10);
   assert.equal(advanced.candlesProcessed, 1001);
+  assert.equal(advanced.history.length, 1);
+  assert.equal(advanced.history[0].timestamp, next.timestamp);
   assert.equal(state.lastTimestamp, seed.at(-1).timestamp);
 });
 
