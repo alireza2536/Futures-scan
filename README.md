@@ -4,91 +4,72 @@
 
 ## محدوده فعلی
 
-این مرحله فقط جمع‌آوری داده بازار و محاسبه اندیکاتورهاست؛ هیچ شرط لانگ یا شورت، سیگنال یا امتیاز معاملاتی اجرا نمی‌شود.
+این نسخه دادهٔ بازار و اندیکاتورها را جمع‌آوری و اعتبارسنجی می‌کند. اسکن خودکار سیگنال یا امتیاز معاملاتی تولید نمی‌کند.
 
-فیلتر ورود به فهرست نمادها قبل از دریافت تاریخچه اعمال می‌شود:
-1. دارایی پایه نباید استیبل‌کوین باشد.
-2. دارایی پایه نباید در فهرست شناخته‌شدهٔ دارایی‌های غیررمزارزی (سهام توکنیزه‌شده، شاخص‌ها، جفت‌ارزهای فیات و کالاها) یا الگوهای شناخته‌شدهٔ شناسهٔ مصنوعی FX/شاخص باشد.
-3. آخرین قیمت معامله قرارداد باید حداکثر ۳۰ دلار باشد؛ دقیقاً ۳۰ دلار پذیرفته می‌شود.
+### صرافی‌های فعال
 
-**محدودیت فیلتر غیررمزارزی:** این فیلتر مبتنی بر فهرست و الگوهای شناخته‌شده است و تضمین نمی‌کند تمام دارایی‌های غیررمزارزی جدید یا ناشناخته را شناسایی کند؛ بنابراین ممیزی فهرست بازار هر صرافی همچنان لازم است.
+فقط شش صرافی زیر مجاز هستند: MEXC، BingX، OKX، WEEX، KuCoin Futures و XT. فهرست از طریق تنظیمات اجرا نیز به همین شش مورد محدود شده است.
 
-## وضعیت پیاده‌سازی فعلی
+### فیلتر ورود نمادها
 
-- **آداپترهای متصل در کد:** OKX و MEXC با پیاده‌سازی بومی؛ BingX، WEEX، KuCoin Futures و XT با آداپترهای اختصاصی متصل به موتور اسکن.
-- **۷ صرافی کاندید پروژه:** MEXC، BingX، OKX، WEEX، KuCoin و XT. آزمون زنده واقعی هر شش صرافی در هر شش تایم‌فریم با موفقیت ۳۶ از ۳۶ مورد را ثبت کرده است؛ در هر مورد ۱۲۰۱ کندل بسته دریافت و اندیکاتورها محاسبه شده‌اند (۵ نوامبر ۲۰۲۶).
-- **تایم‌فریم‌های تعریف‌شده:** 5m، 15m، 1h، 2h، 4h و 1d.
-- **تاریخچه موردنیاز:** ۱۲۰۱ کندل بسته برای محاسبه CCI(1200)، EMA(500) و VWAP جلسه UTC.
-- **اندیکاتورها:** EMA9، EMA21، EMA500، CCI(1200) و VWAP روزانه با ریست ساعت ۰۰:۰۰ UTC؛ مقدارها و زمان کندل مرجع برای هر تایم‌فریم جداگانه گزارش می‌شود.
-- **کیفیت داده:** اعتبارسنجی OHLCV، مرتب‌سازی زمانی، حذف زمان‌های تکراری، کنارگذاشتن کندل باز، کنترل قدیمی‌بودن آخرین کندل و گزارش خطا به‌ازای هر تایم‌فریم.
-- **ذخیره‌سازی:** ماژول اختیاری Neon اضافه شده است. تا زمانی که متغیر محیطی DATABASE_URL در محیط اجرا تنظیم نشود، ذخیره‌سازی انجام نمی‌شود.
-- **آزمون خودکار:** تست‌های Node.js و workflow برای اجرای تست در GitHub Actions اضافه شده‌اند؛ موفقیت اجرای workflow باید از نتیجه واقعی Actions تأیید شود.
+1. قرارداد باید فیوچرز خطی با تسویه USDT و فعال باشد.
+2. دارایی پایه نباید استیبل‌کوین باشد.
+3. دارایی پایه نباید در فهرست شناخته‌شدهٔ دارایی‌های غیررمزارزی (سهام توکنیزه‌شده، شاخص‌ها، جفت‌ارزهای فیات و کالاها) یا الگوهای شناخته‌شدهٔ شناسهٔ مصنوعی FX/شاخص باشد.
+4. آخرین قیمت معامله باید حداکثر ۳۰ دلار باشد؛ دقیقاً ۳۰ دلار پذیرفته می‌شود.
+5. مقدار پیش‌فرض MAX_SYMBOLS برابر صفر است؛ یعنی هیچ سقفی برای تعداد نمادهای واجد شرایط وجود ندارد.
 
-## اجرای تست‌ها
+فیلتر غیررمزارزی مبتنی بر فهرست و الگوهای شناخته‌شده است و تضمین نمی‌کند تمام دارایی‌های غیررمزارزی جدید یا ناشناخته را شناسایی کند؛ ممیزی بازار هر صرافی همچنان لازم است.
+
+## تایم‌فریم‌ها و اندیکاتورها
+
+تایم‌فریم‌ها: 5m، 15m، 1h، 2h و 4h.
+
+برای هر تایم‌فریم، اسکنر ۱۲۰۱ کندل بسته را اعتبارسنجی می‌کند و این مقادیر را گزارش می‌دهد:
+
+- EMA9، EMA20، EMA21 و EMA50
+- CCI با دورهٔ ۱۰۰۰
+- VWAP جلسه با ریست روزانه بر اساس UTC
+- زمان آخرین کندل بسته، تعداد کندل‌ها و سن داده
+
+EMA500 و EMA2000 از محاسبات، state و خروجی اسکنر حذف شده‌اند. هیچ شرط ورود جدیدی به‌جای آن‌ها اضافه نشده است. شرط CCI1000 و سایر محاسبات باقی‌مانده حفظ شده‌اند.
+
+تایم‌فریم 5m فقط برای داده و اعتبارسنجی اندیکاتورهاست و شرط ورود اختصاصی ندارد. شروط شورت در این نسخه تعریف نشده‌اند.
+
+## کیفیت داده و ذخیره‌سازی
+
+- اعتبارسنجی OHLCV، ترتیب زمانی، یکتایی timestamp، پیوستگی کندل‌ها و تازگی آخرین کندل
+- گزارش خطا به‌ازای هر نماد و تایم‌فریم
+- ذخیرهٔ snapshot در Neon فقط در صورت تنظیم DATABASE_URL
+- این کد به‌صورت خودکار ستون‌های قدیمی EMA را از پایگاه داده حذف نمی‌کند.
+
+## اجرا و تست
 
 ```bash
 npm install
 npm test
 ```
 
-## اجرای دریافت داده
+اجرای جمع‌آوری داده:
 
 ```bash
 npm run scan
 ```
 
 متغیرهای اختیاری:
-- `EXCHANGES=OKX,MEXC,BINGX,WEEX,KUCOIN,XT` (پیش‌فرض: هر شش صرافی تأییدشده)
-- `CONCURRENCY=3` (محدوده مجاز ۱ تا ۱۰)
-- `MAX_SYMBOLS=0` (صفر یعنی بدون سقف؛ محدودیت فقط برای تست و پس از فیلترها)
+
+- `EXCHANGES=OKX,MEXC,BINGX,WEEX,KUCOIN,XT`
+- `CONCURRENCY=3` (محدودهٔ مجاز ۱ تا ۱۰)
+- `MAX_SYMBOLS=0` (صفر یعنی بدون سقف)
 - `SYMBOLS=BTC-USDT-SWAP,BTC_USDT` (فقط برای تست نمادهای مشخص)
-- `DATABASE_URL` (اتصال Neon؛ در صورت نبود، ذخیره‌سازی با وضعیت SKIPPED گزارش می‌شود)
-- `REQUIRE_DATA=true` (در صورت وجود داده ناقص/خطا، اجرای اسکن با exit code غیرصفر تمام می‌شود)
+- `DATABASE_URL` (اتصال Neon)
+- `REQUIRE_DATA=true` (در صورت دادهٔ ناقص یا خطا، خروج با کد غیرصفر)
 
 ## فایل‌های اصلی
 
 - `scripts/market-data.mjs`: دریافت و نرمال‌سازی کندل‌های OKX و MEXC
 - `scripts/ccxt-adapters.mjs`: آداپترهای BingX، WEEX، KuCoin Futures و XT
-- `scripts/test-seven-exchanges-live.mjs`: آزمون زنده هر شش صرافی در شش تایم‌فریم
-- `scripts/test-seven-exchange-universe.mjs`: ممیزی کل قراردادهای فعال USDT و پوشش قیمت هر شش صرافی
-- `scripts/indicators.mjs`: EMA، CCI و VWAP
+- `scripts/indicators.mjs`: EMAهای باقیمانده، CCI1000 و VWAP
 - `scripts/entry-filters.mjs`: فیلترهای قطعی ورود نماد
-- `scripts/scan-long.mjs`: نام فایل برای حفظ سازگاری workflow نگه داشته شده؛ اکنون فقط داده و اندیکاتورها را جمع‌آوری می‌کند.
-- `scripts/persist-neon.mjs`: ذخیره snapshot در Neon
-- `database/schema.sql`: ساختار جدول snapshot
-- `scripts/test-entry-filters.mjs` و `scripts/test-indicators.mjs`: تست‌های واحد
-
-## محدودیت‌های باقی‌مانده
-
-- آزمون زنده ۴۲/۴۲ برای دریافت تاریخچه و محاسبه اندیکاتورها موفق شده است. آزمون فهرست کامل بازار نیز برای هر ۶ صرافی موفق شده است: مجموعاً ۵٬۶۹۷ قرارداد فعال و یکتا بررسی شد؛ ۳٬۷۲۸ قرارداد پس از فیلترهای فعلی واجد شرایط بودند. ۱۹ قرارداد BingX و WEEX قیمت معتبر نداشتند و به‌درستی از ورود به اسکن کنار گذاشته شدند.
-- مقایسه عددی EMA، CCI و VWAP با TradingView هنوز انجام نشده است.
-- اتصال Neon در محیط اجرا با DATABASE_URL هنوز پیکربندی و آزمون نشده است.
-- فیلتر شناخته‌شدهٔ غیررمزارزی در کد و تست‌های واحد اعمال شده است؛ با این حال، کامل‌بودن فهرست نمادهای غیررمزارزی برای تمام بازارهای هر صرافی هنوز باید با ممیزی و گزارش واقعی تأیید شود.
-- رابط کاربری وب و انتخابگر تایم‌فریم‌ها هنوز ساخته نشده‌اند.
-
-
-## 5m timeframe coverage
-
-The 5m timeframe is an independent market-data timeframe; it does not add or alter any long/short entry condition.
-
-- OKX uses the native `5m` candle interval.
-- MEXC USDT perpetual contracts use the documented `Min5` interval.
-- The scanner requests two extra candles, removes any still-forming candle, then selects exactly 1,201 closed candles.
-- Before calculating indicators, the 5m history must pass timestamp alignment and strict 5-minute continuity checks. Missing, duplicated, overlapping, misaligned, or unclosed candles cause that symbol/timeframe to be reported as `DATA_ERROR`; the scanner does not silently calculate from a broken series.
-- EMA9, EMA21, EMA500, CCI(1200), and session VWAP are calculated from that verified history. These are data outputs only; no new trade signal or direction rule is added.
-
-Run the automated structural tests:
-
-```bash
-npm test
-```
-
-Run the live 5m API check for BTC USDT perpetual on the two currently implemented adapters:
-
-```bash
-npm run test:5m:live
-```
-
-The live check needs outbound access to both exchange APIs. The latest all-six live run passed all 36 exchange/timeframe combinations, including 5m, with 1,201 closed candles and finite indicator outputs.
-
-- The seven-candidate exchange validation workflow also checks 5m history for MEXC, BingX, OKX, WEEX, KuCoin Futures, and XT: 1,201 closed candles, UTC alignment, no gaps, freshness, and finite EMA9/EMA21/EMA500/CCI1200/VWAP outputs. A venue is not marked passed unless its 5m core check succeeds.
+- `scripts/scan-long.mjs`: دریافت داده و محاسبه اندیکاتورها؛ نام فایل برای سازگاری workflow حفظ شده است
+- `scripts/persist-neon.mjs`: ذخیره snapshot و state روزانه در Neon
+- `scripts/check-final-seven-exchanges.mjs`: اعتبارسنجی داده و اندیکاتورها برای شش صرافی و پنج تایم‌فریم

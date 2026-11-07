@@ -1,7 +1,7 @@
 import { fetchOkxHistory, fetchMexcHistory, assertCandleCoverage } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 
-const REQUIRED_CLOSED_CANDLES=1201;
+const REQUIRED_CLOSED_CANDLES=1001;
 const TIMEFRAME="5m";
 const INTERVAL_MS=300000;
 
@@ -17,8 +17,8 @@ async function verify(name,fetcher) {
     const raw=await fetcher(REQUIRED_CLOSED_CANDLES+2);
     const closed=onlyClosedFiveMinuteCandles(raw).slice(-REQUIRED_CLOSED_CANDLES);
     const bars=assertCandleCoverage(closed,TIMEFRAME,REQUIRED_CLOSED_CANDLES);
-    const indicators=calculateLatestIndicators(bars,{emaLength:500,cciLength:1200});
-    for(const key of ["ema9","ema21","ema","cci","vwap"]) {
+    const indicators=calculateLatestIndicators(bars,{cciLength:1000});
+    for(const key of ["ema9","ema20","ema21","ema50","cci","vwap"]) {
       if(!Number.isFinite(indicators[key])) throw new Error(`non-finite ${key} result`);
     }
     return {
@@ -27,8 +27,8 @@ async function verify(name,fetcher) {
       firstCandleAt:new Date(bars[0].timestamp).toISOString(),
       lastClosedCandleAt:new Date(bars.at(-1).timestamp).toISOString(),
       latestClose:indicators.close,
-      ema9:indicators.ema9,ema21:indicators.ema21,ema500:indicators.ema,
-      cci1200:indicators.cci,vwap:indicators.vwap
+      ema9:indicators.ema9,ema20:indicators.ema20,ema21:indicators.ema21,ema50:indicators.ema50,
+      cci1000:indicators.cci,vwap:indicators.vwap
     };
   } catch(error) {
     return {exchange:name,status:"FAIL",timeframe:TIMEFRAME,error:error.message};

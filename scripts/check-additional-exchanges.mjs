@@ -1,11 +1,10 @@
 import ccxt from "ccxt";
-import { calculateLatestIndicators, calculateEMA } from "./indicators.mjs";
+import { calculateLatestIndicators } from "./indicators.mjs";
 import { isLongSetup, keepClosedFourHourCandles } from "./strategy.mjs";
 
 const TARGETS = [
   { timeframe: "15m", count: 2000 },
-  { timeframe: "4h", count: 2000 },
-  { timeframe: "1d", count: 60 }
+  { timeframe: "4h", count: 2000 }
 ];
 const EXCHANGES = [
   { id: "bitget", label: "Bitget" },
@@ -15,7 +14,7 @@ const EXCHANGES = [
   { id: "kucoinfutures", label: "KuCoin Futures" },
   { id: "coinbaseinternational", label: "Coinbase International" },
 ];
-const INTERVAL_MS = { "15m": 900000, "4h": 14400000, "1d": 86400000 };
+const INTERVAL_MS = { "15m": 900000, "4h": 14400000 };
 
 function validOhlcv(row) {
   return Array.isArray(row) && row.length >= 6 &&
@@ -93,7 +92,7 @@ async function checkExchange(config) {
           throw new Error(`Timeframe ${target.timeframe} is not supported by this exchange adapter`);
         }
         const rows = await fetchHistory(exchange, btc.symbol, target.timeframe, target.count);
-        const minimum = target.timeframe === "1d" ? 50 : 1201;
+        const minimum = 1201;
         if (rows.length < minimum) {
           throw new Error(`Only ${rows.length}/${target.count} valid candles returned; minimum required ${minimum}`);
         }
@@ -105,22 +104,15 @@ async function checkExchange(config) {
         }
         const bars = rowsToBars(rows);
         historyResults[target.timeframe] = bars;
-        if (target.timeframe === "1d") {
-          const closes = bars.map(bar => bar.close);
-          output.dailyIndicators = {
-            close: closes.at(-1),
-            ema20: calculateEMA(closes, 20).at(-1),
-            ema50: calculateEMA(closes, 50).at(-1)
-          };
-        }
         if (target.timeframe === "4h") {
           const closed = keepClosedFourHourCandles(bars);
           if (closed.length < 1201) throw new Error(`Only ${closed.length} closed 4h candles; need 1201`);
-          const values = calculateLatestIndicators(closed, { emaLength: 500, cciLength: 1200 });
-          const longRule = isLongSetup({ close: values.close, ema500: values.ema, cci1200: values.cci });
+          const values = calculateLatestIndicators(closed, { cciLength: 1000 });
+          const longRule = isLongSetup({ cci1000: values.cci });
           output.indicators = {
             candleTime: new Date(values.timestamp).toISOString(),
-            close: values.close, ema500: values.ema, cci1200: values.cci,
+            close: values.close, ema9: values.ema9, ema20: values.ema20,
+            ema21: values.ema21, ema50: values.ema50, cci1000: values.cci,
             longConditionMet: longRule
           };
         }

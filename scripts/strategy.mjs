@@ -1,9 +1,5 @@
-export function isLongSetup({ close, ema500, cci1200 }) {
-  return Number.isFinite(close) &&
-    Number.isFinite(ema500) &&
-    Number.isFinite(cci1200) &&
-    close > ema500 &&
-    cci1200 > 100;
+export function isLongSetup({ cci1000 }) {
+  return Number.isFinite(cci1000) && cci1000 > 100;
 }
 
 export function keepClosedFourHourCandles(bars, now = Date.now()) {

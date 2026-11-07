@@ -5,12 +5,12 @@ import { evaluateEntryEligibility, MAX_ENTRY_PRICE_USD } from "./entry-filters.m
 import { persistScanResults } from "./persist-neon.mjs";
 import { createCcxtAdapter, fetchCcxtHistory, supportedCcxtExchanges } from "./ccxt-adapters.mjs";
 
-const CANDLE_COUNT = 1201;
-const EMA_LENGTH = 500;
-const CCI_LENGTH = 1200;
-const SELECTED_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h", "1d"];
+const CANDLE_COUNT = 1001;
+const CCI_LENGTH = 1000;
+const SELECTED_TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h"];
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
-const EXCHANGES = (process.env.EXCHANGES ?? "OKX,MEXC,BINGX,WEEX,KUCOIN,XT").split(",").map(v=>v.trim().toUpperCase()).filter(Boolean);
+const APPROVED_EXCHANGES = ["OKX","MEXC","BINGX","WEEX","KUCOIN","XT"];
+const EXCHANGES = (process.env.EXCHANGES ?? APPROVED_EXCHANGES.join(",")).split(",").map(v=>v.trim().toUpperCase()).filter(Boolean);
 const MAX_SYMBOLS = Number(process.env.MAX_SYMBOLS ?? 0);
 const SYMBOL_FILTER = (process.env.SYMBOLS ?? "").split(",").map(v=>v.trim()).filter(Boolean);
 const REQUIRE_DATA = process.env.REQUIRE_DATA === "true";
@@ -80,23 +80,25 @@ async function scanSymbolTimeframe(item,timeframe) {
     const bars=keepClosedCandles(raw,timeframe).slice(-CANDLE_COUNT);
     if(bars.length<CANDLE_COUNT) throw new Error(`insufficient closed candles ${bars.length}/${CANDLE_COUNT}`);
     assertCandleCoverage(bars,timeframe,CANDLE_COUNT);
-    const v=calculateLatestIndicators(bars,{emaLength:EMA_LENGTH,cciLength:CCI_LENGTH});
-    if(![v.close,v.ema9,v.ema21,v.ema,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
+    const v=calculateLatestIndicators(bars,{cciLength:CCI_LENGTH});
+    if(![v.close,v.ema9,v.ema20,v.ema21,v.ema50,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
     const ageMs=Date.now()-v.timestamp;
     if(ageMs<0||ageMs>TIMEFRAMES[timeframe].seconds*2000) throw new Error(`stale candle data: ageMs=${ageMs}`);
-    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema21:v.ema21,ema500:v.ema,cci1200:v.cci,vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs};
+    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema20:v.ema20,ema21:v.ema21,ema50:v.ema50,cci1000:v.cci,cciLength:CCI_LENGTH,vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs};
   } catch(error) { return {timeframe,status:"DATA_ERROR",error:error.message}; }
 }
 async function scanSymbol(item) {
   const timeframes={};
-  for(const tf of SELECTED_TIMEFRAMES) timeframes[tf]=await scanSymbolTimeframe(item,tf);
+  for(const tf of SELECTED_TIMEFRAMES) {
+    timeframes[tf]=await scanSymbolTimeframe(item,tf);
+  }
   const ready=Object.values(timeframes).filter(x=>x.status==="DATA_READY").length;
   return {exchange:item.exchange,symbol:item.display,baseAsset:item.baseAsset,lastPriceUsd:item.lastPriceUsd,
     status:ready===SELECTED_TIMEFRAMES.length?"DATA_READY":ready>0?"PARTIAL_DATA":"DATA_ERROR",timeframes};
 }
 if(!Number.isInteger(CONCURRENCY)||CONCURRENCY<1||CONCURRENCY>10) throw new Error("CONCURRENCY must be an integer from 1 to 10");
 const supportedExchanges=["OKX","MEXC",...supportedCcxtExchanges()];
-if(EXCHANGES.some(x=>!supportedExchanges.includes(x))) throw new Error("Unsupported exchange. Supported: "+supportedExchanges.join(", "));
+if(EXCHANGES.some(x=>!APPROVED_EXCHANGES.includes(x)||!supportedExchanges.includes(x))) throw new Error("Only the six approved exchanges are allowed: "+APPROVED_EXCHANGES.join(", "));
 if(!Number.isInteger(MAX_SYMBOLS)||MAX_SYMBOLS<0) throw new Error("MAX_SYMBOLS must be 0 (unlimited) or a positive integer");
 
 const liveAdapters=new Map();
@@ -119,16 +121,14 @@ const exchangeInputs=await Promise.all(EXCHANGES.map(async exchange=>{
 }));
 const candidates=exchangeInputs.flatMap(({symbols})=>symbols);
 const selected=SYMBOL_FILTER.length?candidates.filter(x=>SYMBOL_FILTER.includes(x.symbol)):candidates;
-const rejected=[],eligible=[];
+const eligible=[];
 for(const item of selected) {
   const d=evaluateEntryEligibility({baseAsset:item.baseAsset,lastPrice:item.lastPriceUsd,marketInfo:item.marketInfo});
   if(d.eligible) eligible.push(item);
-  else rejected.push({exchange:item.exchange,symbol:item.display,baseAsset:item.baseAsset,
-    lastPriceUsd:Number.isFinite(item.lastPriceUsd)?item.lastPriceUsd:null,reason:d.reason});
 }
 const universe=MAX_SYMBOLS>0?eligible.slice(0,MAX_SYMBOLS):eligible;
 if(!universe.length) throw new Error("No eligible contracts after stablecoin and <= $30 filters");
-console.log(`UNIVERSE | candidates=${selected.length} | eligible=${eligible.length} | scanning=${universe.length}`);
+console.log(`UNIVERSE | eligible=${eligible.length} | scanning=${universe.length}`);
 let completed=0;
 const results=await mapLimit(universe,CONCURRENCY,async item=>{
   const result=await scanSymbol(item); completed+=1;
@@ -139,10 +139,10 @@ const summary={generatedAt:new Date().toISOString(),purpose:"Market data and ind
   entryFilters:{excludeStablecoinBaseAssets:true,maximumLastPriceUsd:MAX_ENTRY_PRICE_USD,
     priceSource:"exchange perpetual-contract last traded price; USDT is a USD proxy"},
   exchanges:EXCHANGES,timeframes:SELECTED_TIMEFRAMES,requiredClosedCandles:CANDLE_COUNT,
-  candidateCount:selected.length,eligibleBeforeTestCap:eligible.length,rejectedCount:rejected.length,
+  eligibleBeforeTestCap:eligible.length,
   scanned:results.length,dataReady:results.filter(x=>x.status==="DATA_READY").length,
   partialData:results.filter(x=>x.status==="PARTIAL_DATA").length,dataErrors:results.filter(x=>x.status==="DATA_ERROR").length,
-  rejected,results};
+  results};
 await writeFile("scan-results.json",JSON.stringify(summary,null,2));
 const persistence=await persistScanResults(summary);
 await Promise.all([...liveAdapters.values()].map(client=>client.close?.()));

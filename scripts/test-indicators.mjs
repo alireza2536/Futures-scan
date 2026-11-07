@@ -27,17 +27,17 @@ test("zero-volume session produces null rather than NaN",()=>{
   const bars=mkBars(3).map(x=>({...x,volume:0}));
   assert.equal(calculateVWAP(bars).at(-1),null);
 });
-test("latest indicators expose EMA9, EMA21, EMA500, CCI1200 and VWAP",()=>{
-  const bars=mkBars(1201);
+test("latest indicators expose EMA9, EMA20, EMA21, EMA50, CCI1000 and VWAP",()=>{
+  const bars=mkBars(1001);
   const v=calculateLatestIndicators(bars);
-  for(const key of ["ema9","ema21","ema","cci","vwap"]) assert.ok(Number.isFinite(v[key]),key);
-  assert.equal(v.candleCount,1201);
+  for(const key of ["ema9","ema20","ema21","ema50","cci","vwap"]) assert.ok(Number.isFinite(v[key]),key);
+  assert.equal(v.candleCount,1001);
 });
 test("rejects duplicate timestamps and malformed OHLCV",()=>{
   const bars=mkBars(4);
   assert.throws(()=>calculateVWAP([...bars,{...bars[3]}]),/chronological and unique/);
   assert.throws(()=>calculateVWAP([{...bars[0],volume:-1}]),/Invalid OHLCV/);
 });
-test("requires enough history for CCI1200 and EMA500",()=>{
-  assert.throws(()=>calculateLatestIndicators(mkBars(1199)),/At least 1200/);
+test("requires 1001 candles for the CCI1000 scanner history standard",()=>{
+  assert.throws(()=>calculateLatestIndicators(mkBars(1000)),/At least 1000/);
 });
