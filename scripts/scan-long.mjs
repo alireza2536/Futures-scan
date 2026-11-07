@@ -2,8 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { fetchOkxHistory, fetchMexcHistory, TIMEFRAMES, assertCandleCoverage } from "./market-data.mjs";
 import { calculateLatestIndicators } from "./indicators.mjs";
 import { evaluateEntryEligibility, MAX_ENTRY_PRICE_USD } from "./entry-filters.mjs";
-import { persistScanResults } from "./persist-neon.mjs";
-import { loadDailyCCIState, saveDailyCCIState } from "./persist-neon.mjs";
+import { persistScanResults, loadDailyCCIState, saveDailyCCIState } from "./persist-neon.mjs";
 import { advanceDailyCCIState } from "./daily-cci-state.mjs";
 import { createCcxtAdapter, fetchCcxtHistory, supportedCcxtExchanges } from "./ccxt-adapters.mjs";
 
@@ -72,7 +71,7 @@ function keepClosedCandles(bars,timeframe,now=Date.now()) {
   return bars.filter(bar=>bar.confirmed===false?false:bar.confirmed===true?true:
     Number.isFinite(bar.timestamp)&&bar.timestamp+intervalMs<=now);
 }
-async function scanSymbolTimeframe(item,timeframe) {
+async function scanSymbolTimeframe(item,timeframe,{dailyEma500=null}={}) {
   try {
     const raw=["OKX","MEXC"].includes(item.exchange)
       ? item.exchange==="OKX"
@@ -89,16 +88,25 @@ async function scanSymbolTimeframe(item,timeframe) {
       dailyCciState=advanceDailyCCIState(previous,bars);
       await saveDailyCCIState(item.exchange,item.symbol,dailyCciState);
       v.cci=dailyCciState.cci;
+      v.ema=dailyCciState.ema500;
+    } else if(timeframe==="4h") {
+      if(!Number.isFinite(dailyEma500)) throw new Error("daily EMA500 state is unavailable");
+      v.ema=dailyEma500;
     }
     if(![v.close,v.ema9,v.ema21,v.ema,v.cci,v.vwap].every(Number.isFinite)) throw new Error("indicator output contains a missing or non-finite value");
     const ageMs=Date.now()-v.timestamp;
     if(ageMs<0||ageMs>TIMEFRAMES[timeframe].seconds*2000) throw new Error(`stale candle data: ageMs=${ageMs}`);
-    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema21:v.ema21,ema500:v.ema,cci:(timeframe==="1d"?dailyCciState.cci:v.cci),cci1000:v.cci,cciLength:CCI_LENGTH,vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs};
+    return {timeframe,status:"DATA_READY",candleTime:new Date(v.timestamp).toISOString(),close:v.close,ema9:v.ema9,ema21:v.ema21,ema500:v.ema,cci:(timeframe==="1d"?dailyCciState.cci:v.cci),cci1000:v.cci,cciLength:CCI_LENGTH,vwapSessionUtc:v.vwap,candleCount:v.candleCount,candleAgeMs:ageMs,ema500Source:timeframe==="4h"||timeframe==="1d"?"1d":timeframe};
   } catch(error) { return {timeframe,status:"DATA_ERROR",error:error.message}; }
 }
 async function scanSymbol(item) {
   const timeframes={};
-  for(const tf of SELECTED_TIMEFRAMES) timeframes[tf]=await scanSymbolTimeframe(item,tf);
+  // Build/update daily rolling state first so the 4h comparison uses daily EMA500.
+  const daily=await scanSymbolTimeframe(item,"1d");
+  timeframes["1d"]=daily;
+  for(const tf of SELECTED_TIMEFRAMES.filter(value=>value!=="1d")) {
+    timeframes[tf]=await scanSymbolTimeframe(item,tf,{dailyEma500:daily.ema500});
+  }
   const ready=Object.values(timeframes).filter(x=>x.status==="DATA_READY").length;
   return {exchange:item.exchange,symbol:item.display,baseAsset:item.baseAsset,lastPriceUsd:item.lastPriceUsd,
     status:ready===SELECTED_TIMEFRAMES.length?"DATA_READY":ready>0?"PARTIAL_DATA":"DATA_ERROR",timeframes};
