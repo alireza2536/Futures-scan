@@ -6,11 +6,11 @@ This document and the pure rolling-state helper are an isolated design/test step
 
 ## Retention model
 
-- Keep complete raw OHLCV candles for the most recent 14 calendar days per exchange, symbol, and timeframe.
+- Keep complete raw OHLCV candles for the most recent 84 calendar days per exchange, symbol, and timeframe.
 - For CCI1000, retain a compact rolling window of the latest 1,000 Typical Price values (plus timestamps/state metadata) per exchange, symbol, and timeframe. The project continues to require at least 1,001 verified closed candles when initializing/rebuilding this state.
 - Store the computed CCI value and its candle timestamp as the historical indicator record. Do not store the full old OHLCV payload in the indicator archive.
 - For session VWAP, retain the current UTC session's cumulative price-volume sum and volume sum. Store each completed candle's VWAP value and timestamp as the historical indicator record. Reset the two accumulators at the UTC date boundary.
-- Keep compact state and historical indicator records separately from the 14-day raw OHLCV retention.
+- Keep compact state and historical indicator records separately from the 84-day raw OHLCV retention.
 
 ## Update algorithm
 
@@ -19,12 +19,12 @@ This document and the pure rolling-state helper are an isolated design/test step
 3. Build VWAP state from all candles in the current UTC session only: sum(Typical Price × Volume) and sum(Volume).
 4. Whenever a new candle closes for a timeframe, validate that it is exactly the next contiguous candle. Append its Typical Price, evict the oldest TP when the CCI window exceeds 1,000, and recalculate CCI from the window.
 5. Add the new candle's Typical Price × Volume and Volume to the VWAP accumulators. If the candle belongs to a new UTC date, reset both accumulators before adding it.
-6. Persist the new indicator point and compact state atomically. Only after successful persistence and verification may raw candles older than 14 days be compacted/deleted.
+6. Persist the new indicator point and compact state atomically. Only after successful persistence and verification may raw candles older than 84 days be compacted/deleted.
 7. If a gap, duplicate, invalid candle, state mismatch, or persistence failure occurs, do not advance the state and do not delete raw data. Rebuild from exchange history or the retained raw window plus a fresh historical backfill.
 
 ## Important timing detail
 
-The state must advance when each timeframe candle closes, not only once per calendar day. For example, 4h CCI changes on each newly closed 4h candle. The 14-day raw retention window can be cleaned up daily, independently of the indicator update cadence.
+The state must advance when each timeframe candle closes, not only once per calendar day. For example, 4h CCI changes on each newly closed 4h candle. The 84-day raw retention window can be cleaned up daily, independently of the indicator update cadence.
 
 ## Exactness and limitations
 
