@@ -3,6 +3,18 @@ name: Manual Futures Long Scan
 on:
   workflow_dispatch:
     inputs:
+      timeframe:
+        description: "Timeframe to scan (market data and indicators only)"
+        type: choice
+        required: true
+        default: "5m"
+        options:
+          - "5m"
+          - "15m"
+          - "1h"
+          - "2h"
+          - "4h"
+          - "1d"
       exchanges:
         description: "Approved six exchanges"
         required: true
@@ -40,6 +52,7 @@ jobs:
           node --test scripts/test-strategy.mjs
       - name: Scan selected futures exchanges
         env:
+          TIMEFRAME: ${{ inputs.timeframe }}
           EXCHANGES: ${{ inputs.exchanges }}
           MAX_SYMBOLS: ${{ inputs.max_symbols }}
           CONCURRENCY: ${{ inputs.concurrency }}
