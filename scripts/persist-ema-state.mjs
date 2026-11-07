@@ -36,7 +36,10 @@ export async function persistEmaState({ exchange, symbol, timeframe, state, mode
         RETURNING exchange,symbol,timeframe,length,last_timestamp,last_close,ema_value
       )
       INSERT INTO ema_indicator_history (exchange,symbol,timeframe,length,candle_timestamp,close,ema_value)
-      SELECT exchange,symbol,timeframe,length,last_timestamp,last_close,ema_value FROM saved
+      SELECT saved.exchange,saved.symbol,saved.timeframe,saved.length,
+        points.candle_timestamp,points.close,points.ema_value
+      FROM saved CROSS JOIN jsonb_to_recordset(${JSON.stringify(state.history ?? [])}::jsonb)
+        AS points(candle_timestamp bigint, close double precision, ema_value double precision)
       ON CONFLICT DO NOTHING
       RETURNING candle_timestamp`
     : await sql`WITH saved AS (
