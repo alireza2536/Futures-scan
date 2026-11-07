@@ -43,7 +43,7 @@ function okxRowToBar(row) {
   return { timestamp:Number(row[0]), open:Number(row[1]), high:Number(row[2]), low:Number(row[3]),
     close:Number(row[4]), volume:Number(row[5]), confirmed:row[8] === undefined ? null : row[8] === "1" };
 }
-export async function fetchOkxHistory({ base="https://openapi.okx.com", instId="BTC-USDT-SWAP", bar="4H", count=1201 }={}) {
+export async function fetchOkxHistory({ base="https://openapi.okx.com", instId="BTC-USDT-SWAP", bar="4H", count=1001 }={}) {
   if (!Number.isInteger(count) || count < 2 || count > 2000) throw new Error("count must be an integer from 2 to 2000");
   const collected=[]; let cursor=null; let page=0;
   while (collected.length < count && page < 22) {
@@ -75,7 +75,7 @@ export const TIMEFRAMES = Object.freeze({
   "2h": { okx:"2H", mexc:"Hour2", seconds:7200 },
   "4h": { okx:"4H", mexc:"Hour4", seconds:14400 }
 });
-export async function fetchMexcHistory({base="https://api.mexc.com",symbol="BTC_USDT",interval="4h",count=1201}={}) {
+export async function fetchMexcHistory({base="https://api.mexc.com",symbol="BTC_USDT",interval="4h",count=1001}={}) {
   if (!TIMEFRAMES[interval]) throw new Error(`Unsupported MEXC interval: ${interval}`);
   if (!Number.isInteger(count)||count<2||count>5000) throw new Error("MEXC count must be an integer from 2 to 5000");
   if(interval==="2h"){
@@ -132,7 +132,7 @@ export function aggregateHourlyTo2h(hourly) {
 
 // Verifies that a selected timeframe has the full, uninterrupted candle history
 // required by the indicator calculations. Input must contain closed candles only.
-export function assertCandleCoverage(bars, timeframe, requiredCount=1201) {
+export function assertCandleCoverage(bars, timeframe, requiredCount=1001) {
   const spec=TIMEFRAMES[timeframe];
   if (!spec) throw new Error(`Unsupported timeframe: ${timeframe}`);
   if (!Array.isArray(bars) || bars.length < requiredCount) {
