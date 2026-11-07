@@ -21,7 +21,7 @@ function isClosed(bar,timeframe){
 async function loadUniverse(){
   if(exchangeName!=="OKX"&&exchangeName!=="MEXC"){
     const adapter=await createCcxtAdapter(exchangeName);
-    return {client:adapter.client,markets:adapter.symbols.map(x=>({symbol:x.symbol,id:adapter.client.market(x.symbol).id,baseAsset:x.baseAsset,lastPrice:x.lastPriceUsd}))};
+    return {client:adapter.client,markets:adapter.symbols.map(x=>({symbol:x.symbol,id:adapter.client.market(x.symbol).id,baseAsset:x.baseAsset,lastPrice:x.lastPriceUsd,marketInfo:x.marketInfo}))};
   }
   const id=exchangeName==="OKX"?"okx":"mexc";
   const Exchange=ccxt[id];
@@ -32,7 +32,7 @@ async function loadUniverse(){
   let tickers;
   try{tickers=await client.fetchTickers(markets.map(m=>m.symbol));}
   catch{tickers=await client.fetchTickers();}
-  return {client,markets:markets.map(m=>({symbol:m.symbol,id:m.id,baseAsset:m.base,lastPrice:Number(tickers?.[m.symbol]?.last)}))};
+  return {client,markets:markets.map(m=>({symbol:m.symbol,id:m.id,baseAsset:m.base,lastPrice:Number(tickers?.[m.symbol]?.last),marketInfo:m.info}))};
 }
 async function fetchHistory(client,market,timeframe){
   if(exchangeName==="OKX") return fetchOkxHistory({base:process.env.OKX_BASE_URL??"https://openapi.okx.com",instId:market.id,bar:TIMEFRAMES[timeframe].okx,count:COUNT});
@@ -43,7 +43,7 @@ let client;
 const results=[];
 try{
   const loaded=await loadUniverse();client=loaded.client;
-  const eligible=loaded.markets.filter(m=>evaluateEntryEligibility({baseAsset:m.baseAsset,lastPrice:m.lastPrice}).eligible);
+  const eligible=loaded.markets.filter(m=>evaluateEntryEligibility({baseAsset:m.baseAsset,lastPrice:m.lastPrice,marketInfo:m.marketInfo}).eligible);
   console.log(JSON.stringify({event:"universe-loaded",exchange:exchangeName,activeUsdtPerpetuals:loaded.markets.length,eligibleSymbols:eligible.length,timeframes:TIMEFRAME_NAMES,requiredClosedCandles:REQUIRED_CLOSED}));
   for(let index=0;index<eligible.length;index+=1){
     const market=eligible[index];
