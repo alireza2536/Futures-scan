@@ -64,3 +64,28 @@ test("continues to admit ordinary crypto assets under the price ceiling", () => 
     assert.equal(evaluateEntryEligibility({ baseAsset, lastPrice: 10 }).eligible, true);
   }
 });
+
+test("excludes tokenized stock symbols ending in STOCK", () => {
+  for (const baseAsset of ["SNDKSTOCK", "MUSTOCK", "PAYPSTOCK", "CMCSASTOCK", "HPQSTOCK", "TSTOCK"]) {
+    assert.equal(evaluateEntryEligibility({ baseAsset, lastPrice: 10 }).reason, "NON_CRYPTO_UNDERLYING");
+  }
+});
+
+test("uses exchange metadata to exclude stock, ETF, index and commodity contracts", () => {
+  for (const marketInfo of [
+    { displayNameEn: "BITO Stock Perpetual" },
+    { assetClass: "EQUITY" },
+    { productType: "ETF" },
+    { underlyingType: "INDEX" },
+    { displayNameEn: "Gold Perpetual" }
+  ]) {
+    assert.equal(evaluateEntryEligibility({ baseAsset: "BITO", lastPrice: 10, marketInfo }).reason,
+      "NON_CRYPTO_UNDERLYING");
+  }
+});
+
+test("does not reject a crypto contract with explicit crypto metadata", () => {
+  assert.equal(evaluateEntryEligibility({
+    baseAsset: "GAS", lastPrice: 10, marketInfo: { assetClass: "CRYPTO", marketType: "CRYPTO" }
+  }).eligible, true);
+});
