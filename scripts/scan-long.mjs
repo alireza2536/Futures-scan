@@ -119,16 +119,14 @@ const exchangeInputs=await Promise.all(EXCHANGES.map(async exchange=>{
 }));
 const candidates=exchangeInputs.flatMap(({symbols})=>symbols);
 const selected=SYMBOL_FILTER.length?candidates.filter(x=>SYMBOL_FILTER.includes(x.symbol)):candidates;
-const rejected=[],eligible=[];
+const eligible=[];
 for(const item of selected) {
   const d=evaluateEntryEligibility({baseAsset:item.baseAsset,lastPrice:item.lastPriceUsd,marketInfo:item.marketInfo});
   if(d.eligible) eligible.push(item);
-  else rejected.push({exchange:item.exchange,symbol:item.display,baseAsset:item.baseAsset,
-    lastPriceUsd:Number.isFinite(item.lastPriceUsd)?item.lastPriceUsd:null,reason:d.reason});
 }
 const universe=MAX_SYMBOLS>0?eligible.slice(0,MAX_SYMBOLS):eligible;
 if(!universe.length) throw new Error("No eligible contracts after stablecoin and <= $30 filters");
-console.log(`UNIVERSE | candidates=${selected.length} | eligible=${eligible.length} | scanning=${universe.length}`);
+console.log(`UNIVERSE | eligible=${eligible.length} | scanning=${universe.length}`);
 let completed=0;
 const results=await mapLimit(universe,CONCURRENCY,async item=>{
   const result=await scanSymbol(item); completed+=1;
@@ -139,10 +137,10 @@ const summary={generatedAt:new Date().toISOString(),purpose:"Market data and ind
   entryFilters:{excludeStablecoinBaseAssets:true,maximumLastPriceUsd:MAX_ENTRY_PRICE_USD,
     priceSource:"exchange perpetual-contract last traded price; USDT is a USD proxy"},
   exchanges:EXCHANGES,timeframes:SELECTED_TIMEFRAMES,requiredClosedCandles:CANDLE_COUNT,
-  candidateCount:selected.length,eligibleBeforeTestCap:eligible.length,rejectedCount:rejected.length,
+  eligibleBeforeTestCap:eligible.length,
   scanned:results.length,dataReady:results.filter(x=>x.status==="DATA_READY").length,
   partialData:results.filter(x=>x.status==="PARTIAL_DATA").length,dataErrors:results.filter(x=>x.status==="DATA_ERROR").length,
-  rejected,results};
+  results};
 await writeFile("scan-results.json",JSON.stringify(summary,null,2));
 const persistence=await persistScanResults(summary);
 await Promise.all([...liveAdapters.values()].map(client=>client.close?.()));
