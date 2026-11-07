@@ -45,16 +45,16 @@ async function getDailyCciSql() {
     )`;
   }
   await dailyCciTableReady;
-  await dailyCciSql`ALTER TABLE daily_cci_states ADD COLUMN IF NOT EXISTS ema500 double precision`;
+  await dailyCciSql`ALTER TABLE daily_cci_states ADD COLUMN IF NOT EXISTS ema500 double precision`;\n  await dailyCciSql`ALTER TABLE daily_cci_states ADD COLUMN IF NOT EXISTS ema500_timestamp bigint`;
   return dailyCciSql;
 }
 
 export async function loadDailyCCIState(exchange,symbol) {
   const sql=await getDailyCciSql();
   if(!sql) return null;
-  const rows=await sql`SELECT last_timestamp,typical_prices,recent_candles,ema500 FROM daily_cci_states WHERE exchange=${exchange} AND symbol=${symbol} LIMIT 1`;
+  const rows=await sql`SELECT last_timestamp,typical_prices,recent_candles,ema500,ema500_timestamp FROM daily_cci_states WHERE exchange=${exchange} AND symbol=${symbol} LIMIT 1`;
   if(!rows.length) return null;
-  return {lastTimestamp:Number(rows[0].last_timestamp),typicalPrices:rows[0].typical_prices,recentCandles:rows[0].recent_candles,ema500:rows[0].ema500===null?null:Number(rows[0].ema500)};
+  return {lastTimestamp:Number(rows[0].last_timestamp),typicalPrices:rows[0].typical_prices,recentCandles:rows[0].recent_candles,ema500:rows[0].ema500===null?null:Number(rows[0].ema500),ema500Timestamp:rows[0].ema500_timestamp===null?null:Number(rows[0].ema500_timestamp)};
 }
 
 export async function saveDailyCCIState(exchange,symbol,state) {
@@ -63,6 +63,6 @@ export async function saveDailyCCIState(exchange,symbol,state) {
   await sql`INSERT INTO daily_cci_states(exchange,symbol,last_timestamp,typical_prices,recent_candles,ema500)
     VALUES(${exchange},${symbol},${state.lastTimestamp},${JSON.stringify(state.typicalPrices)}::jsonb,${JSON.stringify(state.recentCandles)}::jsonb,${state.ema500})
     ON CONFLICT(exchange,symbol) DO UPDATE SET last_timestamp=EXCLUDED.last_timestamp,
-    typical_prices=EXCLUDED.typical_prices,recent_candles=EXCLUDED.recent_candles,ema500=EXCLUDED.ema500,updated_at=now()`;
+    typical_prices=EXCLUDED.typical_prices,recent_candles=EXCLUDED.recent_candles,ema500=EXCLUDED.ema500,ema500_timestamp=EXCLUDED.ema500_timestamp,updated_at=now()`;
   return {status:"SAVED"};
 }
