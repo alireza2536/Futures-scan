@@ -30,7 +30,7 @@ async function okxUniverse(){
       if(tickers.code!=="0"||!Array.isArray(tickers.data))throw new Error("OKX ticker catalog rejected: "+tickers.msg);
       const active=instruments.data.filter(x=>x.state==="live"&&x.settleCcy==="USDT"&&x.instId?.endsWith("-SWAP"));
       const prices=new Map(tickers.data.map(x=>[x.instId,Number(x.last)]));
-      return active.map(x=>({symbol:x.instId,baseAsset:x.baseCcy||x.instId.split("-")[0],price:prices.get(x.instId),quote:x.quoteCcy||"USDT",settle:x.settleCcy,active:true}));
+      return active.map(x=>({symbol:x.instId,baseAsset:x.baseCcy||x.instId.split("-")[0],price:prices.get(x.instId),quote:x.quoteCcy||"USDT",settle:x.settleCcy,active:true,marketInfo:x}));
     }catch(e){last=e;}
   }
   throw last??new Error("OKX universe unavailable");
