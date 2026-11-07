@@ -8,7 +8,7 @@ import { evaluateEntryEligibility } from "./entry-filters.mjs";
 const EXCHANGES=["OKX","MEXC",...supportedCcxtExchanges()];
 const exchangeName=String(process.env.EXCHANGE??"").toUpperCase();
 if(!EXCHANGES.includes(exchangeName)) throw new Error("Set EXCHANGE to one of: "+EXCHANGES.join(", "));
-const COUNT=1203, REQUIRED_CLOSED=1201, CCI_LENGTH=1000, TIMEFRAME_NAMES=Object.keys(TIMEFRAMES);
+const COUNT=1003, REQUIRED_CLOSED=1001, CCI_LENGTH=1000, TIMEFRAME_NAMES=Object.keys(TIMEFRAMES);
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const reportPath=`history-universe-${exchangeName}.jsonl`;
 fs.writeFileSync(reportPath,"");
