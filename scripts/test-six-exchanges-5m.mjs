@@ -29,8 +29,7 @@ async function runOne(exchange) {
       symbol = "BTC_USDT";
     } else {
       adapter = await createCcxtAdapter(exchange);
-      const market = adapter.symbols.find(x => x.baseAsset === "BTC" &&
-        x.marketInfo?.quote === "USDT" && x.marketInfo?.settle === "USDT");
+      const market = adapter.symbols.find(x => x.baseAsset === "BTC");
       if (!market) throw new Error("Active BTC/USDT linear perpetual contract not found");
       symbol = market.symbol;
       raw = await fetchCcxtHistory({client: adapter.client, symbol, timeframe: TF, count: REQUIRED + 3});
